@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
 import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '../../../shared/types'
 import type { HandlerDeps } from '../handler-deps'
 
 const registeredChannels: string[] = []
@@ -73,6 +74,17 @@ function createMockDeps(): HandlerDeps {
       onRemoved: () => {},
       onInteracted: () => {},
     } as unknown as NonNullable<HandlerDeps['browserPaneManager']>,
+    terminalManager: {
+      onEvent: () => () => {},
+      create: async () => { throw new Error('not implemented') },
+      write: async () => {},
+      resize: async () => {},
+      close: async () => {},
+      kill: async () => {},
+      list: async () => [],
+      restore: async () => [],
+      clearScrollback: async () => {},
+    } as unknown as HandlerDeps['terminalManager'],
     oauthFlowStore: {
       store: () => {},
       getByState: () => null,
@@ -121,11 +133,12 @@ async function getExpectedChannels(): Promise<Set<string>> {
   ])
 
   // GUI handler channels (remain in electron)
-  const [browser, guiSystem, guiWorkspace, guiSettings] = await Promise.all([
+  const [browser, guiSystem, guiWorkspace, guiSettings, terminal] = await Promise.all([
     import('../browser'),
     import('../system'),
     import('../workspace'),
     import('../settings'),
+    import('../terminal'),
   ])
 
   return new Set([
@@ -144,10 +157,15 @@ async function getExpectedChannels(): Promise<Set<string>> {
     ...coreWorkspace.CORE_HANDLED_CHANNELS,
     ...onboarding.HANDLED_CHANNELS,
     ...resources.HANDLED_CHANNELS,
+    RPC_CHANNELS.transfer.START,
+    RPC_CHANNELS.transfer.CHUNK,
+    RPC_CHANNELS.transfer.COMMIT,
+    RPC_CHANNELS.transfer.ABORT,
     ...browser.HANDLED_CHANNELS,
     ...guiSystem.GUI_HANDLED_CHANNELS,
     ...guiWorkspace.GUI_HANDLED_CHANNELS,
     ...guiSettings.GUI_HANDLED_CHANNELS,
+    ...terminal.HANDLED_CHANNELS,
   ])
 }
 

@@ -70,6 +70,12 @@ files:
 extraMetadata:
   main: dist/main.cjs
 
+extraResources:
+  - from: node_modules/node-pty
+    to: app/node_modules/node-pty
+    filter:
+      - "**/*"
+
 # Auto-update: electron-updater fetches from this URL for update manifests (.yml files)
 publish:
   provider: generic

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
 import type { RpcServer } from '@craft-agent/server-core/transport'
+import { RPC_CHANNELS } from '../../../shared/types'
 import type { HandlerDeps } from '../handler-deps'
 
 const registeredChannels: string[] = []
@@ -72,6 +73,17 @@ function createMockDeps(): HandlerDeps {
       onRemoved: () => {},
       onInteracted: () => {},
     } as unknown as NonNullable<HandlerDeps['browserPaneManager']>,
+    terminalManager: {
+      onEvent: () => () => {},
+      create: async () => { throw new Error('not implemented') },
+      write: async () => {},
+      resize: async () => {},
+      close: async () => {},
+      kill: async () => {},
+      list: async () => [],
+      restore: async () => [],
+      clearScrollback: async () => {},
+    } as unknown as HandlerDeps['terminalManager'],
     oauthFlowStore: {
       store: () => {},
       getByState: () => null,
@@ -100,6 +112,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     system,
     workspace,
     onboarding,
+    resources,
   ] = await Promise.all([
     import('@craft-agent/server-core/handlers/rpc/auth'),
     import('@craft-agent/server-core/handlers/rpc/automations'),
@@ -115,6 +128,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/system'),
     import('@craft-agent/server-core/handlers/rpc/workspace'),
     import('@craft-agent/server-core/handlers/rpc/onboarding'),
+    import('@craft-agent/server-core/handlers/rpc/resources'),
   ])
 
   return new Set([
@@ -132,15 +146,21 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     ...system.CORE_HANDLED_CHANNELS,
     ...workspace.CORE_HANDLED_CHANNELS,
     ...onboarding.HANDLED_CHANNELS,
+    ...resources.HANDLED_CHANNELS,
+    RPC_CHANNELS.transfer.START,
+    RPC_CHANNELS.transfer.CHUNK,
+    RPC_CHANNELS.transfer.COMMIT,
+    RPC_CHANNELS.transfer.ABORT,
   ])
 }
 
 async function getExpectedGuiChannels(): Promise<Set<string>> {
-  const [browser, system, workspace, settings] = await Promise.all([
+  const [browser, system, workspace, settings, terminal] = await Promise.all([
     import('../browser'),
     import('../system'),
     import('../workspace'),
     import('../settings'),
+    import('../terminal'),
   ])
 
   return new Set([
@@ -148,6 +168,7 @@ async function getExpectedGuiChannels(): Promise<Set<string>> {
     ...system.GUI_HANDLED_CHANNELS,
     ...workspace.GUI_HANDLED_CHANNELS,
     ...settings.GUI_HANDLED_CHANNELS,
+    ...terminal.HANDLED_CHANNELS,
   ])
 }
 

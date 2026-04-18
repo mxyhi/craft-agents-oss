@@ -11,6 +11,7 @@
     "electron-winstaller",
     "esbuild",
     "koffi",
+    "node-pty",
     "protobufjs",
     "sharp"
   ],

@@ -221,6 +221,7 @@
   "chat.sourcesTooltip": "Quellen",
   "chat.stopResponse": "Antwort stoppen",
   "chat.stopTask": "Aufgabe stoppen",
+  "chat.rerun": "Erneut ausführen",
   "chat.taskTypeAgent": "Aufgabe",
   "chat.taskTypeShell": "Shell",
   "chat.title": "Titel",

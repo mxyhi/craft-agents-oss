@@ -19,6 +19,27 @@ const path = require('path');
 const fs = require('fs');
 
 module.exports = async function afterPack(context) {
+  const resourcesDir = context.electronPlatformName === 'darwin'
+    ? path.join(context.appOutDir, 'Craft Agents.app', 'Contents', 'Resources')
+    : path.join(context.appOutDir, 'resources');
+
+  const packagedNodePty = path.join(resourcesDir, 'app', 'node_modules', 'node-pty');
+  const packagedSpawnHelper = path.join(
+    packagedNodePty,
+    'prebuilds',
+    `${context.electronPlatformName}-${context.arch}`,
+    'spawn-helper',
+  );
+
+  if (fs.existsSync(packagedSpawnHelper)) {
+    try {
+      fs.chmodSync(packagedSpawnHelper, 0o755);
+      console.log(`node-pty spawn-helper executable: ${packagedSpawnHelper}`);
+    } catch (err) {
+      console.log(`Warning: Could not chmod node-pty spawn-helper: ${err.message}`);
+    }
+  }
+
   // Only process macOS builds
   if (context.electronPlatformName !== 'darwin') {
     console.log('Skipping Liquid Glass icon (not macOS)');
@@ -26,7 +47,6 @@ module.exports = async function afterPack(context) {
   }
 
   const appPath = context.appOutDir;
-  const resourcesDir = path.join(appPath, 'Craft Agents.app', 'Contents', 'Resources');
   const precompiledAssets = path.join(context.packager.projectDir, 'resources', 'Assets.car');
 
   console.log(`afterPack: projectDir=${context.packager.projectDir}`);

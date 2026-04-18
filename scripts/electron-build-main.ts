@@ -288,6 +288,7 @@ async function main(): Promise<void> {
       "--format=cjs",
       "--outfile=apps/electron/dist/main.cjs",
       "--external:electron",
+      "--external:node-pty",
       ...buildDefines,
     ],
     cwd: ROOT_DIR,

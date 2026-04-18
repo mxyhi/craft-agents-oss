@@ -210,6 +210,106 @@ export interface SendMessageOptions {
 }
 
 // ---------------------------------------------------------------------------
+// Terminal types
+// ---------------------------------------------------------------------------
+
+export type TerminalSessionStatus =
+  | 'starting'
+  | 'running'
+  | 'exited'
+  | 'killed'
+  | 'failed'
+  | 'restoring'
+
+export type TerminalSplitDirection = 'horizontal' | 'vertical'
+
+export interface TerminalLaunchConfig {
+  workspaceId: string
+  cwd: string
+  shell?: string
+  title?: string
+  cols?: number
+  rows?: number
+}
+
+export interface TerminalSession {
+  id: string
+  workspaceId: string
+  cwd: string
+  shell: string
+  title: string
+  status: TerminalSessionStatus
+  cols: number
+  rows: number
+  pid?: number
+  restored: boolean
+  createdAt: number
+  lastActiveAt: number
+  exitCode?: number
+  exitSignal?: number
+  lastOutputSummary?: string
+}
+
+export interface TerminalPane {
+  id: string
+  sessionId: string
+  tabId: string
+  splitParentId?: string
+  direction?: TerminalSplitDirection
+  size?: number
+}
+
+export interface TerminalTab {
+  id: string
+  title: string
+  rootPaneId: string
+  activeSessionId: string
+  createdAt: number
+}
+
+export interface TerminalSnapshot {
+  dockVisible: boolean
+  dockHeight: number
+  activeTabId?: string
+  inspectorVisible: boolean
+  selectedInspectorSessionId?: string
+  tabs: TerminalTab[]
+  panes: TerminalPane[]
+  sessionLaunchConfigs: Array<{
+    sessionId: string
+    config: TerminalLaunchConfig
+  }>
+}
+
+export interface CreateTerminalParams extends TerminalLaunchConfig {}
+
+export interface TerminalDataEvent {
+  sessionId: string
+  data: string
+}
+
+export interface TerminalExitEvent {
+  sessionId: string
+  exitCode?: number
+  exitSignal?: number
+}
+
+export interface TerminalTitleEvent {
+  sessionId: string
+  title: string
+}
+
+export interface TerminalCwdChangedEvent {
+  sessionId: string
+  cwd: string
+}
+
+export interface TerminalStateChangedEvent {
+  sessionId: string
+  state: TerminalSession
+}
+
+// ---------------------------------------------------------------------------
 // Session commands (consolidated operations)
 // ---------------------------------------------------------------------------
 

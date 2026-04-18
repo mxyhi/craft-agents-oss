@@ -28,6 +28,14 @@ export const CHANNEL_MAP = {
   cancelProcessing: invoke(RPC_CHANNELS.sessions.CANCEL),
   killShell: invoke(RPC_CHANNELS.sessions.KILL_SHELL),
   getTaskOutput: invoke(RPC_CHANNELS.tasks.GET_OUTPUT),
+  createTerminal: invoke(RPC_CHANNELS.terminal.CREATE),
+  writeTerminal: invoke(RPC_CHANNELS.terminal.WRITE),
+  resizeTerminal: invoke(RPC_CHANNELS.terminal.RESIZE),
+  closeTerminal: invoke(RPC_CHANNELS.terminal.CLOSE),
+  killTerminal: invoke(RPC_CHANNELS.terminal.KILL),
+  listTerminals: invoke(RPC_CHANNELS.terminal.LIST),
+  restoreTerminals: invoke(RPC_CHANNELS.terminal.RESTORE),
+  clearTerminalScrollback: invoke(RPC_CHANNELS.terminal.CLEAR_SCROLLBACK),
   respondToPermission: invoke(RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION),
   respondToCredential: invoke(RPC_CHANNELS.sessions.RESPOND_TO_CREDENTIAL),
   sessionCommand: invoke(RPC_CHANNELS.sessions.COMMAND),
@@ -41,6 +49,11 @@ export const CHANNEL_MAP = {
   // Event listeners
   onSessionEvent: listener(RPC_CHANNELS.sessions.EVENT),
   onUnreadSummaryChanged: listener(RPC_CHANNELS.sessions.UNREAD_SUMMARY_CHANGED),
+  onTerminalData: listener(RPC_CHANNELS.terminal.DATA),
+  onTerminalExit: listener(RPC_CHANNELS.terminal.EXIT),
+  onTerminalTitle: listener(RPC_CHANNELS.terminal.TITLE),
+  onTerminalCwdChanged: listener(RPC_CHANNELS.terminal.CWD_CHANGED),
+  onTerminalStateChanged: listener(RPC_CHANNELS.terminal.STATE_CHANGED),
 
   // Transport reliability
   onReconnected: listener('__transport:reconnected'),
