@@ -185,35 +185,16 @@ foreach ($dep in @("interceptor-common.ts", "feature-flags.ts", "interceptor-req
 # 6. Build Electron app
 Write-Host "Building Electron app..."
 
-# Build main process with OAuth credentials
-Write-Host "  Building main process..."
-$MainArgs = @(
-    "apps/electron/src/main/index.ts",
-    "--bundle",
-    "--platform=node",
-    "--format=cjs",
-    "--outfile=apps/electron/dist/main.cjs",
-    "--external:electron"
-)
-# Add OAuth defines if env vars are set
-if ($env:GOOGLE_OAUTH_CLIENT_ID) {
-    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_ID=`"'$env:GOOGLE_OAUTH_CLIENT_ID'`""
-}
-if ($env:GOOGLE_OAUTH_CLIENT_SECRET) {
-    $MainArgs += "--define:process.env.GOOGLE_OAUTH_CLIENT_SECRET=`"'$env:GOOGLE_OAUTH_CLIENT_SECRET'`""
-}
-if ($env:SLACK_OAUTH_CLIENT_ID) {
-    $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_ID=`"'$env:SLACK_OAUTH_CLIENT_ID'`""
-}
-if ($env:SLACK_OAUTH_CLIENT_SECRET) {
-    $MainArgs += "--define:process.env.SLACK_OAUTH_CLIENT_SECRET=`"'$env:SLACK_OAUTH_CLIENT_SECRET'`""
-}
-if ($env:MICROSOFT_OAUTH_CLIENT_ID) {
-    $MainArgs += "--define:process.env.MICROSOFT_OAUTH_CLIENT_ID=`"'$env:MICROSOFT_OAUTH_CLIENT_ID'`""
-}
+# Build main process via the shared cross-platform entry so Windows stays in sync
+# with macOS/Linux for:
+# - main.cjs
+# - interceptor.cjs
+# - session-mcp-server
+# - pi-agent-server
+Write-Host "  Building main process + subprocess runtimes..."
 Push-Location $RootDir
 try {
-    & npx esbuild @MainArgs
+    bun run electron:build:main
     if ($LASTEXITCODE -ne 0) { throw "Main process build failed" }
 } finally {
     Pop-Location
@@ -258,6 +239,8 @@ Push-Location $ElectronDir
 try {
     bun scripts/copy-assets.ts
     if ($LASTEXITCODE -ne 0) { throw "Asset copy failed" }
+    bun scripts/validate-assets.ts
+    if ($LASTEXITCODE -ne 0) { throw "Asset validation failed" }
     Write-Host "  Assets copied" -ForegroundColor Green
 } finally {
     Pop-Location
