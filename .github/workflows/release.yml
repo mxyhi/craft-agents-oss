@@ -32,6 +32,8 @@ jobs:
             artifact_glob: |
               apps/electron/release/Craft-Agents-x64.dmg
               apps/electron/release/Craft-Agents-x64.zip
+              apps/electron/release/Craft-Agents-arm64.dmg
+              apps/electron/release/Craft-Agents-arm64.zip
               apps/electron/release/latest-mac.yml
               apps/electron/release/*.blockmap
           - id: windows-x64
