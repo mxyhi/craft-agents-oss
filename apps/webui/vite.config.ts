@@ -8,8 +8,8 @@ export default defineConfig({
     react({
       babel: {
         plugins: [
-          'jotai/babel/plugin-debug-label',
-          ['jotai/babel/plugin-react-refresh', { customAtomNames: ['atomFamily'] }],
+          'jotai-babel/plugin-debug-label',
+          ['jotai-babel/plugin-react-refresh', { customAtomNames: ['atomFamily'] }],
         ],
       },
     }),
