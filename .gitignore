@@ -52,9 +52,6 @@ __pycache__/
 # Accidental literal tilde directories (Node.js doesn't expand ~)
 ~/
 
-# Lock files from other package managers
-pnpm-lock.yaml
-
 # Craft Agent local data (sessions, credentials, config)
 .craft-agent/
 
