@@ -46,11 +46,13 @@ Use descriptive branch names:
 
 ### Making Changes
 
-1. Create a feature branch from `main`
+1. Create a feature branch from the `main` branch you plan to merge into
 2. Make your changes
 3. Run type checking: `bun run typecheck:all`
 4. Commit your changes with clear, descriptive messages
 5. Push to your fork and create a pull request
+
+If you're using a fork while waiting for an upstream change to land, open the PR against your fork's `main` first. You can keep using that fork as your stable branch, then open or update the upstream PR separately.
 
 ### Code Style
 
@@ -73,6 +75,7 @@ bun run typecheck:all
 2. **Description**: Explain what the PR does and why
 3. **Testing**: Describe how you tested the changes
 4. **Screenshots**: Include screenshots for UI changes
+5. **Base branch**: Use the `main` branch that will actually receive the change. For fork-first workflows, that is your fork's `main`.
 
 ### PR Template
 
