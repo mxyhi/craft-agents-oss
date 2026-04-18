@@ -1,33 +1,101 @@
 /**
  * Cross-platform asset copy script.
  *
- * Copies the resources/ directory to dist/resources/.
- * All bundled assets (docs, themes, permissions, tool-icons) now live in resources/
- * which electron-builder handles natively via directories.buildResources.
+ * Copies static resources/ to dist/resources/ and stages built subprocess
+ * servers required by packaged backends (session MCP + Pi agent server).
  *
- * At Electron startup, setBundledAssetsRoot(__dirname) is called, and then
- * getBundledAssetsDir('docs') resolves to <__dirname>/resources/docs/, etc.
- *
- * Run: bun scripts/copy-assets.ts
+ * Pi agent server uses `koffi` as an external native dependency, so we copy a
+ * trimmed runtime package next to the staged server bundle. The runtime
+ * resolver already falls back to `dist/resources/<server>/index.js` in
+ * packaged builds, so staging generated artifacts here avoids polluting the
+ * source `resources/` tree.
  */
 
-import { cpSync, copyFileSync, mkdirSync } from 'fs';
+import { cpSync, copyFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 
-// Copy all resources (icons, themes, docs, permissions, tool-icons, etc.)
-cpSync('resources', 'dist/resources', { recursive: true });
+const ELECTRON_DIR = join(import.meta.dir, '..');
+const ROOT_DIR = join(ELECTRON_DIR, '..', '..');
 
-console.log('✓ Copied resources/ → dist/resources/');
+const RESOURCES_DIR = join(ELECTRON_DIR, 'resources');
+const DIST_RESOURCES_DIR = join(ELECTRON_DIR, 'dist', 'resources');
 
-// Copy PowerShell parser script (for Windows command validation in Explore mode)
-// Source: packages/shared/src/agent/powershell-parser.ps1
-// Destination: dist/resources/powershell-parser.ps1
-const psParserSrc = join('..', '..', 'packages', 'shared', 'src', 'agent', 'powershell-parser.ps1');
-const psParserDest = join('dist', 'resources', 'powershell-parser.ps1');
-try {
+function resetDir(path: string): void {
+  rmSync(path, { recursive: true, force: true });
+  mkdirSync(path, { recursive: true });
+}
+
+function requirePath(path: string, description: string): void {
+  if (!existsSync(path)) {
+    throw new Error(`${description} not found at ${path}`);
+  }
+}
+
+function stageSessionServer(): void {
+  const sourcePath = join(ROOT_DIR, 'packages', 'session-mcp-server', 'dist', 'index.js');
+  const destDir = join(DIST_RESOURCES_DIR, 'session-mcp-server');
+
+  requirePath(sourcePath, 'Session MCP server build output');
+  resetDir(destDir);
+  copyFileSync(sourcePath, join(destDir, 'index.js'));
+  console.log('✓ Staged session-mcp-server → dist/resources/session-mcp-server/');
+}
+
+function resolveKoffiBuildTargets(): string[] {
+  if (process.platform === 'darwin') {
+    return ['darwin_arm64', 'darwin_x64'];
+  }
+  if (process.platform === 'win32') {
+    return ['win32_x64', 'win32_arm64'];
+  }
+  return ['linux_x64', 'linux_arm64', 'musl_x64', 'musl_arm64'];
+}
+
+function stagePiAgentServer(): void {
+  const piSourceDir = join(ROOT_DIR, 'packages', 'pi-agent-server', 'dist');
+  const piEntryPath = join(piSourceDir, 'index.js');
+  const koffiSourceDir = join(ROOT_DIR, 'node_modules', 'koffi');
+  const piDestDir = join(DIST_RESOURCES_DIR, 'pi-agent-server');
+  const koffiDestDir = join(piDestDir, 'node_modules', 'koffi');
+
+  requirePath(piEntryPath, 'Pi agent server build output');
+  requirePath(koffiSourceDir, 'koffi runtime dependency');
+
+  resetDir(piDestDir);
+  cpSync(piSourceDir, piDestDir, { recursive: true });
+
+  mkdirSync(koffiDestDir, { recursive: true });
+  for (const entry of ['package.json', 'index.js', 'indirect.js', 'index.d.ts', 'lib']) {
+    const src = join(koffiSourceDir, entry);
+    if (existsSync(src)) {
+      cpSync(src, join(koffiDestDir, entry), { recursive: true });
+    }
+  }
+
+  const buildRoot = join(koffiSourceDir, 'build', 'koffi');
+  for (const target of resolveKoffiBuildTargets()) {
+    const src = join(buildRoot, target);
+    if (!existsSync(src)) continue;
+    cpSync(src, join(koffiDestDir, 'build', 'koffi', target), { recursive: true });
+  }
+
+  console.log('✓ Staged pi-agent-server + koffi → dist/resources/pi-agent-server/');
+}
+
+function copyPowerShellParser(): void {
+  const psParserSrc = join(ROOT_DIR, 'packages', 'shared', 'src', 'agent', 'powershell-parser.ps1');
+  const psParserDest = join(DIST_RESOURCES_DIR, 'powershell-parser.ps1');
+  if (!existsSync(psParserSrc)) {
+    console.log('⚠ powershell-parser.ps1 copy skipped (not critical on non-Windows)');
+    return;
+  }
   copyFileSync(psParserSrc, psParserDest);
   console.log('✓ Copied powershell-parser.ps1 → dist/resources/');
-} catch (err) {
-  // Only warn - PowerShell validation is optional on non-Windows platforms
-  console.log('⚠ powershell-parser.ps1 copy skipped (not critical on non-Windows)');
 }
+
+cpSync(RESOURCES_DIR, DIST_RESOURCES_DIR, { recursive: true, force: true });
+console.log('✓ Copied resources/ → dist/resources/');
+
+stageSessionServer();
+stagePiAgentServer();
+copyPowerShellParser();
