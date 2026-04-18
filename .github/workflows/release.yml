@@ -14,9 +14,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-linux-x64:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
+  build-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: linux-x64
+            os: ubuntu-latest
+            build_command: bash apps/electron/scripts/build-linux.sh x64
+            artifact_glob: |
+              apps/electron/release/Craft-Agents-x64.AppImage
+              apps/electron/release/latest-linux.yml
+              apps/electron/release/*.blockmap
+          - id: mac-x64
+            os: macos-latest
+            build_command: bash apps/electron/scripts/build-dmg.sh x64
+            artifact_glob: |
+              apps/electron/release/Craft-Agents-x64.dmg
+              apps/electron/release/Craft-Agents-x64.zip
+              apps/electron/release/latest-mac.yml
+              apps/electron/release/*.blockmap
+          - id: windows-x64
+            os: windows-latest
+            build_command: powershell -ExecutionPolicy Bypass -File apps/electron/scripts/build-win.ps1
+            artifact_glob: |
+              apps/electron/release/Craft-Agents-x64.exe
+              apps/electron/release/latest.yml
+              apps/electron/release/*.blockmap
+              apps/electron/release/builder-debug.yml
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -30,6 +57,7 @@ jobs:
           bun-version: "1.3.10"
 
       - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -38,8 +66,8 @@ jobs:
             libopenjp2-tools \
             libfuse2
 
-      - name: Build Linux AppImage
-        run: bash apps/electron/scripts/build-linux.sh x64
+      - name: Build release package
+        run: ${{ matrix.build_command }}
 
       - name: Capture release metadata
         id: meta
@@ -51,13 +79,10 @@ jobs:
           fi
           echo "tag_name=$tag_name" >> "$GITHUB_OUTPUT"
 
-      - name: Create or update GitHub Release
+      - name: Upload assets to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag_name }}
+          append_body: false
           generate_release_notes: true
-          files: |
-            apps/electron/release/Craft-Agents-x64.AppImage
-            apps/electron/release/*.yml
-            apps/electron/release/*.blockmap
-
+          files: ${{ matrix.artifact_glob }}
