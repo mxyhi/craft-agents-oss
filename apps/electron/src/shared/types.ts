@@ -211,14 +211,6 @@ import type {
   DirectoryListingResult,
   RemoteSessionTransferPayload,
   ImportRemoteSessionTransferResult,
-  TerminalSession,
-  TerminalSnapshot,
-  CreateTerminalParams,
-  TerminalDataEvent,
-  TerminalExitEvent,
-  TerminalTitleEvent,
-  TerminalCwdChangedEvent,
-  TerminalStateChangedEvent,
 } from '@craft-agent/shared/protocol'
 
 export interface ElectronAPI {
@@ -233,21 +225,8 @@ export interface ElectronAPI {
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
   getTaskOutput(taskId: string): Promise<string | null>
-  createTerminal(params: CreateTerminalParams): Promise<TerminalSession>
-  writeTerminal(sessionId: string, data: string): Promise<void>
-  resizeTerminal(sessionId: string, cols: number, rows: number): Promise<void>
-  closeTerminal(sessionId: string): Promise<void>
-  killTerminal(sessionId: string): Promise<void>
-  listTerminals(workspaceId: string): Promise<TerminalSession[]>
-  restoreTerminals(workspaceId: string, snapshot: TerminalSnapshot): Promise<TerminalSession[]>
-  clearTerminalScrollback(sessionId: string): Promise<void>
   respondToPermission(sessionId: string, requestId: string, allowed: boolean, alwaysAllow: boolean, options?: PermissionResponseOptions): Promise<boolean>
   respondToCredential(sessionId: string, requestId: string, response: CredentialResponse): Promise<boolean>
-  onTerminalData(callback: (event: TerminalDataEvent) => void): () => void
-  onTerminalExit(callback: (event: TerminalExitEvent) => void): () => void
-  onTerminalTitle(callback: (event: TerminalTitleEvent) => void): () => void
-  onTerminalCwdChanged(callback: (event: TerminalCwdChangedEvent) => void): () => void
-  onTerminalStateChanged(callback: (event: TerminalStateChangedEvent) => void): () => void
 
   // Consolidated session command handler
   sessionCommand(sessionId: string, command: SessionCommand): Promise<void | ShareResult | RefreshTitleResult | { count: number }>

@@ -221,7 +221,6 @@
   "chat.sourcesTooltip": "ソース",
   "chat.stopResponse": "応答を停止",
   "chat.stopTask": "タスクを停止",
-  "chat.rerun": "再実行",
   "chat.taskTypeAgent": "タスク",
   "chat.taskTypeShell": "Shell",
   "chat.title": "タイトル",

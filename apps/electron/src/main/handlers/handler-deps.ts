@@ -9,15 +9,10 @@ import type { SessionManager } from '@craft-agent/server-core/sessions'
 import type { WindowManager } from '../window-manager'
 import type { BrowserPaneManager } from '../browser-pane-manager'
 import type { OAuthFlowStore } from '@craft-agent/shared/auth'
-import type { TerminalManager } from '../terminal-manager'
 
-type CoreDeps = BaseHandlerDeps<
+export type HandlerDeps = BaseHandlerDeps<
   SessionManager,
   OAuthFlowStore,
   WindowManager,
   BrowserPaneManager
 >
-
-export type HandlerDeps = CoreDeps & {
-  terminalManager: TerminalManager
-}

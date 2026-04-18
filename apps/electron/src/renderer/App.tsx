@@ -68,33 +68,6 @@ import { TransportConnectionBanner, shouldShowTransportConnectionBanner } from '
 import { getFileManagerName } from '@/lib/platform'
 import { ActionRegistryProvider } from '@/actions'
 import { toast } from 'sonner'
-import { TerminalDock } from '@/components/terminal/TerminalDock'
-import * as storage from '@/lib/local-storage'
-import {
-  clearTerminalStateAtom,
-  appendTerminalOutputAtom,
-  createTerminalTabAtom,
-  hydrateTerminalSnapshotAtom,
-  replaceTerminalOutputAtom,
-  setTerminalDockVisibleAtom,
-  splitTerminalTabAtom,
-  syncTerminalTabWithSessionAtom,
-  terminalSessionsMapAtom,
-  terminalSnapshotAtom,
-  upsertTerminalSessionAtom,
-} from '@/atoms/terminal'
-import {
-  createEmptyTerminalSnapshot,
-  getTerminalSnapshotSignature,
-  resolveTerminalLayoutStorageScope,
-  shouldRestoreTerminalSnapshot,
-} from '@/lib/terminal-layout'
-import {
-  buildTerminalOutputReplayCommand,
-  normalizeTerminalCommand,
-  TERMINAL_REQUEST_EVENT,
-  type TerminalRequestPayload,
-} from '@/lib/terminal-bridge'
 
 type AppState = 'loading' | 'onboarding' | 'reauth' | 'workspace-picker' | 'ready'
 
@@ -145,7 +118,6 @@ function handleBackgroundTaskEvent(
           startTime: Date.now(),
           elapsedSeconds: 0,
           intent: evt.intent as string | undefined,
-          command: evt.command as string | undefined,
         },
       ])
     }
@@ -242,15 +214,6 @@ export default function App() {
   const addSession = useSetAtom(addSessionAtom)
   const removeSession = useSetAtom(removeSessionAtom)
   const updateSessionDirect = useSetAtom(updateSessionAtom)
-  const clearTerminalState = useSetAtom(clearTerminalStateAtom)
-  const appendTerminalOutput = useSetAtom(appendTerminalOutputAtom)
-  const createTerminalTab = useSetAtom(createTerminalTabAtom)
-  const hydrateTerminalSnapshot = useSetAtom(hydrateTerminalSnapshotAtom)
-  const replaceTerminalOutput = useSetAtom(replaceTerminalOutputAtom)
-  const setTerminalDockVisible = useSetAtom(setTerminalDockVisibleAtom)
-  const splitTerminalTab = useSetAtom(splitTerminalTabAtom)
-  const syncTerminalTabWithSession = useSetAtom(syncTerminalTabWithSessionAtom)
-  const upsertTerminalSession = useSetAtom(upsertTerminalSessionAtom)
   const store = useStore()
 
   // Helper to update a session by ID with partial fields
@@ -292,26 +255,6 @@ export default function App() {
     const workspace = workspaces.find(w => w.id === windowWorkspaceId)
     return workspace?.remoteServer?.remoteWorkspaceId ?? null
   }, [windowWorkspaceId, workspaces])
-
-  const terminalSnapshot = useAtomValue(terminalSnapshotAtom)
-  const terminalStorageScope = useMemo(() => {
-    return resolveTerminalLayoutStorageScope(windowWorkspaceSlug, windowWorkspaceId)
-  }, [windowWorkspaceId, windowWorkspaceSlug])
-  const terminalSnapshotSignatureRef = useRef<string | null>(null)
-  const terminalHydratingRef = useRef(false)
-
-  const patchTerminalSession = useCallback((
-    sessionId: string,
-    updates: Partial<import('../shared/types').TerminalSession>,
-  ) => {
-    const current = store.get(terminalSessionsMapAtom).get(sessionId)
-    if (!current) return
-    upsertTerminalSession({
-      ...current,
-      ...updates,
-      lastActiveAt: Date.now(),
-    })
-  }, [store, upsertTerminalSession])
 
   // LLM connections with authentication status (for provider selection)
   const [llmConnections, setLlmConnections] = useState<LlmConnectionWithStatus[]>([])
@@ -666,88 +609,6 @@ export default function App() {
 
   // Session selection state
   const [sessionSelection, setSession] = useSession()
-  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
-
-  const activeWorkspace = useMemo(() => {
-    if (!windowWorkspaceId) return null
-    return workspaces.find((workspace) => workspace.id === windowWorkspaceId) ?? null
-  }, [windowWorkspaceId, workspaces])
-
-  const activeTerminalCwd = useMemo(() => {
-    if (sessionSelection.selected) {
-      const sessionMeta = sessionMetaMap.get(sessionSelection.selected)
-      if (sessionMeta?.workingDirectory) {
-        return sessionMeta.workingDirectory
-      }
-    }
-
-    return activeWorkspace?.rootPath ?? null
-  }, [activeWorkspace?.rootPath, sessionMetaMap, sessionSelection.selected])
-
-  const openTerminalSession = useCallback(async (payload: {
-    cwd?: string
-    sessionId?: string
-    title?: string
-    splitTabId?: string
-    direction?: import('../shared/types').TerminalSplitDirection
-    command?: string
-    output?: string
-  }) => {
-    if (!windowWorkspaceId) {
-      toast.error('No active workspace')
-      return null
-    }
-
-    const sessionScopedCwd = payload.sessionId
-      ? sessionMetaMap.get(payload.sessionId)?.workingDirectory
-      : null
-    const cwd = payload.cwd ?? sessionScopedCwd ?? activeTerminalCwd ?? activeWorkspace?.rootPath
-    if (!cwd) {
-      toast.error('No working directory available for terminal')
-      return null
-    }
-
-    const session = await window.electronAPI.createTerminal({
-      workspaceId: windowWorkspaceId,
-      cwd,
-      title: payload.title,
-    })
-
-    if (payload.splitTabId) {
-      splitTerminalTab({
-        tabId: payload.splitTabId,
-        session,
-        direction: payload.direction ?? 'vertical',
-      })
-    } else {
-      createTerminalTab({
-        session,
-        title: payload.title,
-      })
-    }
-
-    setTerminalDockVisible(true)
-
-    const command = payload.output
-      ? buildTerminalOutputReplayCommand(session.shell, payload.output)
-      : payload.command
-        ? normalizeTerminalCommand(payload.command)
-        : null
-
-    if (command) {
-      await window.electronAPI.writeTerminal(session.id, command)
-    }
-
-    return session
-  }, [
-    activeTerminalCwd,
-    activeWorkspace?.rootPath,
-    createTerminalTab,
-    sessionMetaMap,
-    setTerminalDockVisible,
-    splitTerminalTab,
-    windowWorkspaceId,
-  ])
 
   // Notification system - shows native OS notifications and badge count
   const handleNavigateToSession = useCallback((sessionId: string) => {
@@ -823,163 +684,6 @@ export default function App() {
       refreshLlmConnections()
     }
   }, [windowWorkspaceId, refreshLlmConnections])
-
-  useEffect(() => {
-    if (appState !== 'ready' || !windowWorkspaceId || !terminalStorageScope) {
-      terminalHydratingRef.current = false
-      terminalSnapshotSignatureRef.current = null
-      clearTerminalState()
-      return
-    }
-
-    let cancelled = false
-    const snapshot = storage.get(
-      storage.KEYS.terminalLayout,
-      createEmptyTerminalSnapshot(),
-      terminalStorageScope,
-    )
-
-    terminalHydratingRef.current = true
-    clearTerminalState()
-    hydrateTerminalSnapshot(snapshot)
-    terminalSnapshotSignatureRef.current = getTerminalSnapshotSignature(snapshot)
-
-    const hydrateTerminals = async () => {
-      try {
-        const liveSessions = (await window.electronAPI.listTerminals(windowWorkspaceId)).filter((session) => {
-          return session.status === 'starting' || session.status === 'running' || session.status === 'restoring'
-        })
-        if (cancelled) return
-
-        const sessions = shouldRestoreTerminalSnapshot(snapshot, liveSessions)
-          ? await window.electronAPI.restoreTerminals(windowWorkspaceId, snapshot)
-          : liveSessions
-
-        if (cancelled) return
-
-        for (const session of sessions) {
-          upsertTerminalSession(session)
-          if (session.lastOutputSummary) {
-            replaceTerminalOutput({
-              sessionId: session.id,
-              output: session.lastOutputSummary,
-            })
-          }
-          syncTerminalTabWithSession({
-            sessionId: session.id,
-            title: session.title,
-          })
-        }
-      } catch (error) {
-        if (!cancelled) {
-          console.error('Failed to hydrate terminal layout:', error)
-        }
-      } finally {
-        if (cancelled) return
-        terminalHydratingRef.current = false
-        const currentSnapshot = store.get(terminalSnapshotAtom)
-        const signature = getTerminalSnapshotSignature(currentSnapshot)
-        terminalSnapshotSignatureRef.current = signature
-        storage.set(storage.KEYS.terminalLayout, currentSnapshot, terminalStorageScope)
-      }
-    }
-
-    void hydrateTerminals()
-
-    return () => {
-      cancelled = true
-      terminalHydratingRef.current = false
-    }
-  }, [
-    appState,
-    clearTerminalState,
-    hydrateTerminalSnapshot,
-    replaceTerminalOutput,
-    store,
-    syncTerminalTabWithSession,
-    terminalStorageScope,
-    upsertTerminalSession,
-    windowWorkspaceId,
-  ])
-
-  useEffect(() => {
-    if (!terminalStorageScope || terminalHydratingRef.current) return
-    const signature = getTerminalSnapshotSignature(terminalSnapshot)
-    if (terminalSnapshotSignatureRef.current === signature) return
-    terminalSnapshotSignatureRef.current = signature
-    storage.set(storage.KEYS.terminalLayout, terminalSnapshot, terminalStorageScope)
-  }, [terminalSnapshot, terminalStorageScope])
-
-  useEffect(() => {
-    const cleanups = [
-      window.electronAPI.onTerminalData((event) => {
-        appendTerminalOutput({
-          sessionId: event.sessionId,
-          data: event.data,
-        })
-      }),
-      window.electronAPI.onTerminalExit((event) => {
-        patchTerminalSession(event.sessionId, {
-          status: 'exited',
-          exitCode: event.exitCode,
-          exitSignal: event.exitSignal,
-        })
-      }),
-      window.electronAPI.onTerminalTitle((event) => {
-        patchTerminalSession(event.sessionId, { title: event.title })
-        syncTerminalTabWithSession({
-          sessionId: event.sessionId,
-          title: event.title,
-        })
-      }),
-      window.electronAPI.onTerminalCwdChanged((event) => {
-        patchTerminalSession(event.sessionId, { cwd: event.cwd })
-      }),
-      window.electronAPI.onTerminalStateChanged((event) => {
-        upsertTerminalSession(event.state)
-        syncTerminalTabWithSession({
-          sessionId: event.sessionId,
-          title: event.state.title,
-        })
-      }),
-    ]
-
-    return () => {
-      for (const cleanup of cleanups) {
-        cleanup()
-      }
-    }
-  }, [
-    appendTerminalOutput,
-    patchTerminalSession,
-    syncTerminalTabWithSession,
-    upsertTerminalSession,
-  ])
-
-  useEffect(() => {
-    const handleTerminalRequest = (event: Event) => {
-      const detail = (event as CustomEvent<TerminalRequestPayload>).detail
-      if (!detail) return
-
-      void openTerminalSession({
-        cwd: detail.cwd,
-        sessionId: detail.sessionId,
-        title: detail.title,
-        splitTabId: detail.splitTabId,
-        direction: detail.direction,
-        command: detail.action === 'rerun' ? detail.command : undefined,
-        output: detail.action === 'view-output' ? detail.output : undefined,
-      }).catch((error) => {
-        console.error('Failed to handle terminal request:', error)
-        toast.error('Failed to open terminal')
-      })
-    }
-
-    window.addEventListener(TERMINAL_REQUEST_EVENT, handleTerminalRequest as EventListener)
-    return () => {
-      window.removeEventListener(TERMINAL_REQUEST_EVENT, handleTerminalRequest as EventListener)
-    }
-  }, [openTerminalSession])
 
   // Listen for session events - uses centralized event processor for consistent state transitions
   //
@@ -1808,7 +1512,6 @@ export default function App() {
       // Reset all state
       // Clear session atoms - initialize with empty array clears all per-session atoms
       initializeSessions([])
-      clearTerminalState()
       setWorkspaces([])
       setWindowWorkspaceId(null)
       // Reset setupNeeds to force fresh onboarding start
@@ -1825,7 +1528,7 @@ export default function App() {
     } finally {
       setShowResetDialog(false)
     }
-  }, [clearTerminalState, onboarding, initializeSessions])
+  }, [onboarding, initializeSessions])
 
   // Handle workspace selection
   // - Default: switch workspace in same window (in-window switching)
@@ -1863,9 +1566,6 @@ export default function App() {
       // (prevents memory growth on repeated workspace switches)
       sessionDraftsRef.current.clear()
 
-      // 6.1 Clear terminal state from the previous workspace before the new workspace hydrates.
-      clearTerminalState()
-
       // 7. Reset sources and skills atoms to empty
       // (prevents stale data flash during workspace switch - AppShell will reload)
       store.set(sourcesAtom, [])
@@ -1881,7 +1581,7 @@ export default function App() {
       // Sessions and theme will reload automatically due to windowWorkspaceId dependency
       // in useEffect hooks.
     }
-  }, [clearTerminalState, windowWorkspaceId, setSession, store])
+  }, [windowWorkspaceId, setSession, store])
 
   // Handle workspace switch by slug (called by NavigationContext on popstate when ?ws= changes)
   const handleSwitchWorkspaceBySlug = useCallback((slug: string) => {
@@ -2135,26 +1835,20 @@ export default function App() {
                 onRetry={handleReconnectTransport}
               />
             )}
-            <div className="flex-1 min-h-0 flex flex-col">
-              <div className="flex-1 min-h-0">
-                {sessionLoadError ? (
-                  <SessionLoadErrorScreen
-                    message={sessionLoadError}
-                    onRetry={() => { void loadSessionsFromServer() }}
-                  />
-                ) : (
-                  <AppShell
-                    contextValue={appShellContextValue}
-                    defaultLayout={[20, 32, 48]}
-                    menuNewChatTrigger={menuNewChatTrigger}
-                    isFocusedMode={isFocusedMode}
-                  />
-                )}
-              </div>
-              <TerminalDock
-                defaultCwd={activeTerminalCwd}
-                onCreateTerminal={openTerminalSession}
-              />
+            <div className="flex-1 min-h-0">
+              {sessionLoadError ? (
+                <SessionLoadErrorScreen
+                  message={sessionLoadError}
+                  onRetry={() => { void loadSessionsFromServer() }}
+                />
+              ) : (
+                <AppShell
+                  contextValue={appShellContextValue}
+                  defaultLayout={[20, 32, 48]}
+                  menuNewChatTrigger={menuNewChatTrigger}
+                  isFocusedMode={isFocusedMode}
+                />
+              )}
             </div>
             <ResetConfirmationDialog
               open={showResetDialog}

@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
-import { ChevronDown, Square, ArrowUpRight, RotateCw } from 'lucide-react'
+import { ChevronDown, Square, ArrowUpRight } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -12,7 +12,6 @@ import { Spinner } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import type { BackgroundTask } from './ActiveTasksBar'
-import { dispatchTerminalRequest } from '@/lib/terminal-bridge'
 
 /** Terminal data for overlay display */
 export interface TerminalOverlayData {
@@ -49,6 +48,8 @@ export interface TaskActionMenuProps {
   onKillTask: (taskId: string) => void
   /** Callback to insert message into input field */
   onInsertMessage?: (text: string) => void
+  /** Callback to show terminal output overlay */
+  onShowTerminalOverlay?: (data: TerminalOverlayData) => void
   /** Additional class name */
   className?: string
 }
@@ -60,7 +61,7 @@ export interface TaskActionMenuProps {
  * - View Output: Opens task output in terminal overlay
  * - Stop Task: Kills shell tasks (agent tasks show warning)
  */
-export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, className }: TaskActionMenuProps) {
+export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, onShowTerminalOverlay, className }: TaskActionMenuProps) {
   const { t } = useTranslation()
   const [open, setOpen] = React.useState(false)
 
@@ -86,33 +87,26 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, c
   const displayElapsed = task.type === 'shell' ? localElapsed : task.elapsedSeconds
 
   const handleViewOutput = async () => {
+    if (!onShowTerminalOverlay) {
+      toast.error(t('toast.terminalOverlayNotAvailable'))
+      return
+    }
+
     try {
+      // Fetch task output via IPC
       const output = await window.electronAPI.getTaskOutput(task.id)
-      dispatchTerminalRequest({
-        action: 'view-output',
-        sessionId,
-        title: task.intent || `${task.type} task`,
+
+      // Show terminal output in overlay
+      onShowTerminalOverlay({
+        command: task.intent || `${task.type} task`,
         output: output || t('chat.noOutputYet'),
+        description: task.intent,
+        toolType: 'bash', // Use 'bash' for both shell and agent tasks
       })
       setOpen(false)
     } catch (err) {
       toast.error(t('toast.failedToLoadTaskOutput'))
     }
-  }
-
-  const handleRerunTask = () => {
-    if (!task.command) {
-      toast.error(t('toast.terminalOverlayNotAvailable'))
-      return
-    }
-
-    dispatchTerminalRequest({
-      action: 'rerun',
-      sessionId,
-      title: task.intent || task.command,
-      command: task.command,
-    })
-    setOpen(false)
   }
 
   const handleStopTask = () => {
@@ -168,13 +162,6 @@ export function TaskActionMenu({ task, sessionId, onKillTask, onInsertMessage, c
           <ArrowUpRight />
           {t('chat.viewOutput')}
         </StyledDropdownMenuItem>
-
-        {task.command && (
-          <StyledDropdownMenuItem onClick={handleRerunTask}>
-            <RotateCw />
-            {t('chat.rerun')}
-          </StyledDropdownMenuItem>
-        )}
 
         {/* Stop Task - Only show for shell tasks (inserts kill command into input) */}
         {task.type === 'shell' && (

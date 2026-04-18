@@ -653,8 +653,6 @@ export interface BackgroundTask {
   elapsedSeconds: number
   /** Task intent/description */
   intent?: string
-  /** Original shell command when the background task came from Bash */
-  command?: string
 }
 
 /**

@@ -94,7 +94,6 @@ import { setPowerShellValidatorRoot } from '@craft-agent/shared/agent'
 import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
-import { TerminalManager } from './terminal-manager'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
 import log, { isDebugMode, mainLog, getLogFilePath } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
@@ -188,7 +187,6 @@ const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
 let browserPaneManager: BrowserPaneManager | null = null
-let terminalManager: TerminalManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
@@ -633,7 +631,6 @@ app.whenReady().then(async () => {
           platform: p,
           windowManager: windowManager ?? undefined,
           browserPaneManager: browserPaneManager ?? undefined,
-          terminalManager: terminalManager ?? (terminalManager = new TerminalManager()),
           oauthFlowStore: ofs,
         }),
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
@@ -670,7 +667,6 @@ app.whenReady().then(async () => {
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager
-      terminalManager = terminalManager ?? new TerminalManager()
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId

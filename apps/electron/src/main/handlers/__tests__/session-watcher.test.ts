@@ -78,17 +78,6 @@ function createTestHarness(sessionPaths: Map<string, string>) {
       logger: { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
       imageProcessor: { getMetadata: async () => null, process: async () => Buffer.from('') },
     } as unknown as HandlerDeps['platform'],
-    terminalManager: {
-      onEvent: () => () => {},
-      create: async () => { throw new Error('not implemented') },
-      write: async () => {},
-      resize: async () => {},
-      close: async () => {},
-      kill: async () => {},
-      list: async () => [],
-      restore: async () => [],
-      clearScrollback: async () => {},
-    } as unknown as HandlerDeps['terminalManager'],
     oauthFlowStore: {
       store: () => {}, getByState: () => null, remove: () => {}, cleanup: () => {}, dispose: () => {}, size: 0,
     } as unknown as HandlerDeps['oauthFlowStore'],

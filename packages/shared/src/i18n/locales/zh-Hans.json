@@ -221,7 +221,6 @@
   "chat.sourcesTooltip": "数据源",
   "chat.stopResponse": "停止回复",
   "chat.stopTask": "停止任务",
-  "chat.rerun": "重新运行",
   "chat.taskTypeAgent": "任务",
   "chat.taskTypeShell": "Shell",
   "chat.title": "标题",

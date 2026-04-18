@@ -56,17 +56,6 @@ describe('settings default thinking RPC handlers', () => {
           process: async () => Buffer.from(''),
         },
       },
-      terminalManager: {
-        onEvent: () => () => {},
-        create: async () => { throw new Error('not implemented') },
-        write: async () => {},
-        resize: async () => {},
-        close: async () => {},
-        kill: async () => {},
-        list: async () => [],
-        restore: async () => [],
-        clearScrollback: async () => {},
-      } as unknown as HandlerDeps['terminalManager'],
       oauthFlowStore: {
         store: () => {},
         getByState: () => null,
