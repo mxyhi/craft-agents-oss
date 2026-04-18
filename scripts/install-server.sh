@@ -4,9 +4,9 @@
 # Usage:
 #   bash scripts/install-server.sh
 #
-# Prerequisites: Bun >= 1.0
+# Prerequisites: Bun >= 1.0, pnpm
 # What it does:
-#   1. Checks Bun is installed
+#   1. Checks Bun and pnpm are installed
 #   2. Installs dependencies
 #   3. Generates a server token
 #   4. Prints the run command
@@ -32,8 +32,16 @@ if ! command -v bun &>/dev/null; then
   exit 1
 fi
 
+if ! command -v pnpm &>/dev/null; then
+  error "pnpm is required but not installed."
+  echo "  Install: corepack enable pnpm"
+  exit 1
+fi
+
 BUN_VERSION=$(bun --version 2>/dev/null || echo "0.0.0")
 info "Bun $BUN_VERSION detected"
+PNPM_VERSION=$(pnpm --version 2>/dev/null || echo "0.0.0")
+info "pnpm $PNPM_VERSION detected"
 
 # ---------------------------------------------------------------------------
 # Find repo root
@@ -53,7 +61,7 @@ fi
 
 info "Installing dependencies..."
 cd "$REPO_ROOT"
-bun install --frozen-lockfile 2>/dev/null || bun install
+pnpm install --frozen-lockfile 2>/dev/null || pnpm install
 
 info "Building subprocess servers..."
 bun run server:build:subprocess

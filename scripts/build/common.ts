@@ -292,22 +292,13 @@ export function cleanBuildArtifacts(config: BuildConfig): void {
 
 /**
  * Install dependencies
- * On Windows, uses hoisted linker to avoid .bun symlink directory
+ * pnpm workspace config uses hoisted node_modules to keep build tooling stable.
  */
 export async function installDependencies(config: BuildConfig): Promise<void> {
-  const { rootDir, platform } = config;
+  const { rootDir } = config;
 
-  if (platform === 'win32') {
-    // Use hoisted linker on Windows - Bun's default isolated mode creates
-    // node_modules/.bun/ with symlinks that esbuild can't traverse on Windows
-    // ("Access is denied" errors with junction points)
-    // Hoisted mode creates flat npm-style node_modules without .bun
-    console.log('Installing dependencies (Windows hoisted mode)...');
-    await $`cd ${rootDir} && bun install --linker=hoisted`.quiet();
-  } else {
-    console.log('Installing dependencies...');
-    await $`cd ${rootDir} && bun install`.quiet();
-  }
+  console.log('Installing dependencies with pnpm...');
+  await $`cd ${rootDir} && pnpm install --frozen-lockfile`.quiet();
 }
 
 /**
@@ -320,7 +311,7 @@ export function copySDK(config: BuildConfig): void {
   const sdkDest = join(electronDir, 'node_modules', '@anthropic-ai', 'claude-agent-sdk');
 
   if (!existsSync(sdkSource)) {
-    throw new Error(`SDK not found at ${sdkSource}. Run 'bun install' first.`);
+    throw new Error(`SDK not found at ${sdkSource}. Run 'pnpm install' first.`);
   }
 
   console.log('Copying SDK...');

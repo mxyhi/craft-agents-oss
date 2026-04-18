@@ -77,7 +77,7 @@ irm https://agents.craft.do/install-app.ps1 | iex
 ```bash
 git clone https://github.com/lukilabs/craft-agents-oss.git
 cd craft-agents-oss
-bun install
+pnpm install
 bun run electron:start
 ```
 

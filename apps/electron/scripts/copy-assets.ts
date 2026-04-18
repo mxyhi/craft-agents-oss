@@ -11,7 +11,7 @@
  * source `resources/` tree.
  */
 
-import { cpSync, copyFileSync, existsSync, mkdirSync, rmSync } from 'fs';
+import { cpSync, copyFileSync, existsSync, mkdirSync, readdirSync, rmSync } from 'fs';
 import { join } from 'path';
 
 const ELECTRON_DIR = join(import.meta.dir, '..');
@@ -29,6 +29,28 @@ function requirePath(path: string, description: string): void {
   if (!existsSync(path)) {
     throw new Error(`${description} not found at ${path}`);
   }
+}
+
+function resolveKoffiSourceDir(): string {
+  const directPath = join(ROOT_DIR, 'node_modules', 'koffi');
+  if (existsSync(directPath)) {
+    return directPath;
+  }
+
+  const bunStoreDir = join(ROOT_DIR, 'node_modules', '.bun');
+  if (existsSync(bunStoreDir)) {
+    for (const entry of readdirSync(bunStoreDir)) {
+      if (!entry.startsWith('koffi@')) continue;
+      const candidate = join(bunStoreDir, entry, 'node_modules', 'koffi');
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+
+  throw new Error(
+    `koffi runtime dependency not found at ${directPath} or inside ${bunStoreDir}`,
+  );
 }
 
 function stageSessionServer(): void {
@@ -54,12 +76,11 @@ function resolveKoffiBuildTargets(): string[] {
 function stagePiAgentServer(): void {
   const piSourceDir = join(ROOT_DIR, 'packages', 'pi-agent-server', 'dist');
   const piEntryPath = join(piSourceDir, 'index.js');
-  const koffiSourceDir = join(ROOT_DIR, 'node_modules', 'koffi');
+  const koffiSourceDir = resolveKoffiSourceDir();
   const piDestDir = join(DIST_RESOURCES_DIR, 'pi-agent-server');
   const koffiDestDir = join(piDestDir, 'node_modules', 'koffi');
 
   requirePath(piEntryPath, 'Pi agent server build output');
-  requirePath(koffiSourceDir, 'koffi runtime dependency');
 
   resetDir(piDestDir);
   cpSync(piSourceDir, piDestDir, { recursive: true });

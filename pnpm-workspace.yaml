@@ -1,0 +1,16 @@
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - '!apps/online-docs'
+
+nodeLinker: hoisted
+
+onlyBuiltDependencies:
+  - '@sentry/cli'
+  - 'electron'
+  - 'electron-winstaller'
+  - 'esbuild'
+  - 'koffi'
+  - 'node-pty'
+  - 'protobufjs'
+  - 'sharp'

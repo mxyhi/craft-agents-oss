@@ -13,7 +13,7 @@ fi
 cd "$REPO_ROOT"
 
 echo "==> Installing dependencies..."
-bun install
+pnpm install
 
 echo "==> Running validate-daily-note locally..."
 ANTHROPIC_API_KEY="$API_KEY" bun run apps/cli/src/index.ts run \

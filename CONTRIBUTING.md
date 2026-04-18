@@ -7,6 +7,7 @@ Thank you for your interest in contributing to Craft Agents! This document provi
 ### Prerequisites
 
 - [Bun](https://bun.sh/) runtime
+- [pnpm](https://pnpm.io/) package manager
 - Node.js 18+ (for some tooling)
 - macOS, Linux, or Windows
 
@@ -20,7 +21,7 @@ Thank you for your interest in contributing to Craft Agents! This document provi
 
 2. Install dependencies:
    ```bash
-   bun install
+   pnpm install
    ```
 
 3. Set up environment variables:

@@ -95,7 +95,7 @@ foreach ($folder in $foldersToClean) {
 Write-Host "Installing dependencies..."
 Push-Location $RootDir
 try {
-    bun install
+    pnpm install --frozen-lockfile
 } finally {
     Pop-Location
 }
@@ -158,7 +158,7 @@ try {
 $SdkSource = "$RootDir\node_modules\@anthropic-ai\claude-agent-sdk"
 if (-not (Test-Path $SdkSource)) {
     Write-Host "ERROR: SDK not found at $SdkSource" -ForegroundColor Red
-    Write-Host "Run 'bun install' from the repository root first."
+    Write-Host "Run 'pnpm install' from the repository root first."
     exit 1
 }
 Write-Host "Copying SDK..."
