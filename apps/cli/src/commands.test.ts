@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'bun:test'
-import { parseArgs, resolveApiKey, shouldSetupLlmConnection } from './index.ts'
+import {
+  buildCustomEndpointSetupPayload,
+  parseArgs,
+  resolveApiKey,
+  resolveCustomEndpointApi,
+  shouldSetupLlmConnection,
+} from './index.ts'
 
 // ---------------------------------------------------------------------------
 // Arg parsing tests
@@ -50,6 +56,31 @@ describe('parseArgs', () => {
     expect(args.sendTimeout).toBe(60000)
     expect(args.command).toBe('send')
     expect(args.rest).toEqual(['session-1', 'hello'])
+  })
+
+  it('parses --wire-api for custom endpoint protocol selection', () => {
+    const args = parseArgs([
+      'bun', 'index.ts',
+      '--provider', 'openai',
+      '--base-url', 'https://proxy.example/backend-api',
+      '--wire-api', 'codex-responses',
+      'run', 'hello',
+    ])
+
+    expect(args.wireApi).toBe('codex-responses')
+  })
+
+  it('falls back to LLM_WIRE_API env var', () => {
+    const prevWireApi = process.env.LLM_WIRE_API
+    process.env.LLM_WIRE_API = 'codex-responses'
+
+    try {
+      const args = parseArgs(['bun', 'index.ts', 'run', 'hello'])
+      expect(args.wireApi).toBe('codex-responses')
+    } finally {
+      if (prevWireApi === undefined) delete process.env.LLM_WIRE_API
+      else process.env.LLM_WIRE_API = prevWireApi
+    }
   })
 
   it('falls back to env vars for url and token', () => {
@@ -229,6 +260,34 @@ describe('parseArgs', () => {
   it('parses --provider deepseek for run', () => {
     const args = parseArgs(['bun', 'index.ts', '--provider', 'deepseek', 'run', 'hello'])
     expect(args.provider).toBe('deepseek')
+  })
+})
+
+describe('resolveCustomEndpointApi', () => {
+  it('defaults Anthropic providers to anthropic-messages', () => {
+    expect(resolveCustomEndpointApi('anthropic', '')).toBe('anthropic-messages')
+  })
+
+  it('defaults non-Anthropic providers to openai-completions', () => {
+    expect(resolveCustomEndpointApi('openai', '')).toBe('openai-completions')
+  })
+
+  it('maps codex-responses switch to Pi Codex Responses protocol', () => {
+    expect(resolveCustomEndpointApi('openai', 'codex-responses')).toBe('openai-codex-responses')
+  })
+
+  it('builds custom endpoint setup payload with Codex Responses protocol', () => {
+    expect(buildCustomEndpointSetupPayload({
+      provider: 'openai',
+      baseUrl: 'https://proxy.example/backend-api',
+      wireApi: 'codex-responses',
+    }, 'sk-test', 'openai-cli')).toEqual({
+      slug: 'openai-cli',
+      credential: 'sk-test',
+      baseUrl: 'https://proxy.example/backend-api',
+      customEndpoint: { api: 'openai-codex-responses' },
+      defaultModel: 'gpt-4o',
+    })
   })
 })
 

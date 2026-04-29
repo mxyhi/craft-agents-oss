@@ -506,6 +506,7 @@ export function ApiKeyInput({
           )}>
             {([
               { value: 'openai-completions' as const, label: 'OpenAI Compatible' },
+              { value: 'openai-codex-responses' as const, label: 'Codex CLI' },
               { value: 'anthropic-messages' as const, label: 'Anthropic Compatible' },
             ]).map(({ value, label }) => (
               <button

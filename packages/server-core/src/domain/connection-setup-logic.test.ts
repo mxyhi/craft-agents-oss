@@ -62,6 +62,13 @@ describe('resolveCompatPiAuthProvider', () => {
     })).toBe('anthropic')
   })
 
+  it('keeps OpenAI provider hint for authenticated Codex Responses endpoints', () => {
+    expect(resolveCompatPiAuthProvider({
+      authType: 'api_key_with_endpoint',
+      customEndpointApi: 'openai-codex-responses',
+    })).toBe('openai')
+  })
+
   it('leaves keyless local endpoints generic', () => {
     expect(resolveCompatPiAuthProvider({
       authType: 'none',

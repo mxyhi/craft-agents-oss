@@ -8,6 +8,7 @@
  */
 
 import { resolve } from 'path'
+import type { CustomEndpointApi } from '@craft-agent/shared/config'
 import { CliRpcClient } from './client.ts'
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,7 @@ export interface CliArgs {
   model: string
   apiKey: string
   baseUrl: string
+  wireApi: string
 }
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -63,6 +65,7 @@ export function parseArgs(argv: string[]): CliArgs {
   let model = ''
   let apiKey = ''
   let baseUrl = ''
+  let wireApi = ''
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -126,6 +129,9 @@ export function parseArgs(argv: string[]): CliArgs {
       case '--base-url':
         baseUrl = args[++i] ?? ''
         break
+      case '--wire-api':
+        wireApi = args[++i] ?? ''
+        break
       case '--help':
       case '-h':
         command = 'help'
@@ -153,8 +159,47 @@ export function parseArgs(argv: string[]): CliArgs {
   if (!model) model = process.env.LLM_MODEL ?? ''
   if (!apiKey) apiKey = process.env.LLM_API_KEY ?? ''
   if (!baseUrl) baseUrl = process.env.LLM_BASE_URL ?? ''
+  if (!wireApi) wireApi = process.env.LLM_WIRE_API ?? ''
 
-  return { url, token, workspace, timeout, json, tlsCa, sendTimeout, command, rest, sources, mode, outputFormat, noCleanup, noSpinner, verbose, serverEntry, workspaceDir, provider, model, apiKey, baseUrl }
+  return { url, token, workspace, timeout, json, tlsCa, sendTimeout, command, rest, sources, mode, outputFormat, noCleanup, noSpinner, verbose, serverEntry, workspaceDir, provider, model, apiKey, baseUrl, wireApi }
+}
+
+export function resolveCustomEndpointApi(provider: string, wireApi: string): CustomEndpointApi {
+  const normalized = wireApi.trim()
+  if (!normalized || normalized === 'auto') {
+    return provider === 'anthropic' ? 'anthropic-messages' : 'openai-completions'
+  }
+  if (normalized === 'codex-responses' || normalized === 'openai-codex-responses') {
+    return 'openai-codex-responses'
+  }
+  if (normalized === 'openai-completions' || normalized === 'anthropic-messages') {
+    return normalized
+  }
+  throw new Error(`Unsupported --wire-api "${wireApi}". Use auto, openai-completions, anthropic-messages, or codex-responses.`)
+}
+
+export interface CustomEndpointSetupPayload {
+  slug: string
+  credential: string
+  baseUrl: string
+  customEndpoint: { api: CustomEndpointApi }
+  defaultModel: string
+}
+
+export function buildCustomEndpointSetupPayload(
+  args: Pick<CliArgs, 'provider' | 'baseUrl' | 'wireApi'>,
+  credential: string,
+  slug: string,
+): CustomEndpointSetupPayload {
+  const api = resolveCustomEndpointApi(args.provider, args.wireApi)
+  const isAnthropicApi = api === 'anthropic-messages'
+  return {
+    slug,
+    credential,
+    baseUrl: args.baseUrl,
+    customEndpoint: { api },
+    defaultModel: isAnthropicApi ? 'claude-sonnet-4-6' : 'gpt-4o',
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -576,11 +621,7 @@ async function setupLlmConnection(
     // and sets providerType='pi_compat', piAuthProvider, etc.
     providerType = 'pi_compat'
     authType = 'api_key_with_endpoint'
-    setupPayload.baseUrl = baseUrl
-    setupPayload.customEndpoint = {
-      api: provider === 'anthropic' ? 'anthropic-messages' : 'openai-completions',
-    }
-    setupPayload.defaultModel = provider === 'anthropic' ? 'claude-sonnet-4-6' : 'gpt-4o'
+    Object.assign(setupPayload, buildCustomEndpointSetupPayload(args, key, connectionSlug))
   } else if (provider === 'anthropic') {
     providerType = 'anthropic'
     authType = 'api_key'
@@ -737,6 +778,7 @@ async function cmdValidate(args: CliArgs): Promise<void> {
       baseUrl: args.baseUrl,
       apiKey: args.apiKey,
       provider: args.provider,
+      wireApi: args.wireApi,
     })
     client.destroy()
     if (server) await server.stop()
@@ -821,6 +863,8 @@ export interface ValidateContext {
   apiKey?: string
   /** Provider hint (from --provider, default 'anthropic') */
   provider?: string
+  /** Custom endpoint wire protocol (from --wire-api) */
+  wireApi?: string
   workspaceId?: string
   workspaceRootPath?: string
   createdWorkspace?: boolean
@@ -1083,7 +1127,6 @@ export function getValidateSteps(): ValidateStep[] {
             return `0 connections (${error instanceof Error ? error.message : 'missing API key'})`
           }
           const slug = `${provider}-cli`
-          const isAnthropicApi = provider === 'anthropic'
           await client.invoke('LLM_Connection:save', {
             slug,
             name: `${getProviderDisplayName(provider)} (Custom Endpoint)`,
@@ -1092,11 +1135,11 @@ export function getValidateSteps(): ValidateStep[] {
             createdAt: Date.now(),
           })
           const result = await client.invoke('settings:setupLlmConnection', {
-            slug,
-            credential: key,
-            baseUrl: ctx.baseUrl,
-            customEndpoint: { api: isAnthropicApi ? 'anthropic-messages' : 'openai-completions' },
-            defaultModel: isAnthropicApi ? 'claude-sonnet-4-6' : 'gpt-4o',
+            ...buildCustomEndpointSetupPayload({
+              provider,
+              baseUrl: ctx.baseUrl,
+              wireApi: ctx.wireApi ?? '',
+            }, key, slug),
           }) as { success: boolean; error?: string }
           if (!result?.success) return `setup failed: ${result?.error ?? 'unknown'}`
           await client.invoke('LLM_Connection:setDefault', slug)
@@ -1710,7 +1753,7 @@ export async function runValidation(
   jsonMode: boolean,
   noSpinner?: boolean,
   workspaceDir?: string,
-  validateOptions?: { baseUrl?: string; apiKey?: string; provider?: string },
+  validateOptions?: { baseUrl?: string; apiKey?: string; provider?: string; wireApi?: string },
 ): Promise<number> {
   const steps = getValidateSteps()
   const total = steps.length
@@ -1719,6 +1762,7 @@ export async function runValidation(
     baseUrl: validateOptions?.baseUrl,
     apiKey: validateOptions?.apiKey,
     provider: validateOptions?.provider,
+    wireApi: validateOptions?.wireApi,
   }
   let passed = 0
   let failed = 0
@@ -1909,6 +1953,7 @@ LLM Configuration (for 'run' command):
   --model <id>           Model to use (or $LLM_MODEL)
   --api-key <key>        API key (or $LLM_API_KEY, or provider-specific e.g. $OPENAI_API_KEY)
   --base-url <url>       Custom API endpoint (or $LLM_BASE_URL)
+  --wire-api <api>       Custom endpoint protocol: auto, openai-completions, anthropic-messages, codex-responses
 
 Commands:
   run <message>          Spawn server, send message, stream response, exit
