@@ -75,6 +75,7 @@ import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metada
 import {
   CODEX_CLI_REQUEST_HEADERS,
   configureCodexCliRequestSimulation,
+  resolveCustomEndpointRuntimeApi,
 } from './codex-cli-request-simulation.ts';
 
 // ============================================================
@@ -437,10 +438,11 @@ function registerCustomEndpointModels(
   }
   const allIds = [...customEndpointModelIds];
   const isCodexResponses = api === 'openai-codex-responses';
+  const runtimeApi = resolveCustomEndpointRuntimeApi(api);
   registry.registerProvider('custom-endpoint', {
     baseUrl,
     apiKey: resolveCustomEndpointApiKey(),
-    api,
+    api: runtimeApi,
     authHeader: true,
     ...(isCodexResponses ? { headers: CODEX_CLI_REQUEST_HEADERS } : {}),
     models: allIds.map(id => buildCustomEndpointModelDef(

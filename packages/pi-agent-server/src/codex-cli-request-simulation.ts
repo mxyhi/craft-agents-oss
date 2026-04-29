@@ -1,3 +1,5 @@
+import type { CustomEndpointApi } from '../../shared/src/config/llm-connections.ts';
+
 export const CODEX_CLI_ORIGINATOR = 'codex_cli_rs';
 export const CODEX_CLI_USER_AGENT = 'codex_cli_rs/0.125.0';
 
@@ -10,23 +12,25 @@ export const CODEX_CLI_REQUEST_HEADERS: Record<string, string> = {
 
 type FetchInput = Parameters<typeof globalThis.fetch>[0];
 type FetchInit = Parameters<typeof globalThis.fetch>[1];
+type CustomEndpointRuntimeApi = Exclude<CustomEndpointApi, 'openai-codex-responses'> | 'openai-responses';
 
 let restoreFetch: (() => void) | undefined;
 let activeBaseUrl: string | undefined;
 
-export function resolveCodexResponsesUrl(baseUrl: string): string {
-  const normalized = baseUrl.trim().replace(/\/+$/, '');
-  if (normalized.endsWith('/codex/responses')) return normalized;
-  if (normalized.endsWith('/codex')) return `${normalized}/responses`;
-  return `${normalized}/codex/responses`;
+export function resolveCustomEndpointRuntimeApi(api: CustomEndpointApi): CustomEndpointRuntimeApi {
+  return api === 'openai-codex-responses' ? 'openai-responses' : api;
 }
 
 export function shouldApplyCodexCliRequestHeaders(inputUrl: string, baseUrl: string): boolean {
   try {
     const target = new URL(inputUrl);
-    const expected = new URL(resolveCodexResponsesUrl(baseUrl));
-    return target.origin === expected.origin
-      && target.pathname.replace(/\/+$/, '') === expected.pathname.replace(/\/+$/, '');
+    const configuredBase = new URL(baseUrl.trim().replace(/\/+$/, ''));
+    const configuredPath = configuredBase.pathname.replace(/\/+$/, '');
+    const targetPath = target.pathname.replace(/\/+$/, '');
+    return target.origin === configuredBase.origin
+      && (configuredPath === '' || configuredPath === '/'
+        ? targetPath.startsWith('/')
+        : targetPath === configuredPath || targetPath.startsWith(`${configuredPath}/`));
   } catch {
     return false;
   }
