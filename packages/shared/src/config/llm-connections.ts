@@ -193,18 +193,39 @@ export interface LlmConnectionWithStatus extends LlmConnection {
 // ============================================================
 
 /**
+ * Returns true when `modelId` must NOT be used as the mini/summarization model
+ * given the current auth flavor.
+ *
+ * - `codex-mini-latest` is always denied (Pi SDK rejects it outright).
+ * - When `piAuthProvider === 'openai-codex'` (ChatGPT Plus/Pro OAuth or
+ *   ChatGPT-JWT API key), all `*codex-mini*` variants (e.g. `gpt-5.1-codex-mini`)
+ *   are denied — the ChatGPT backend refuses them with: "The '<model>' model is
+ *   not supported when using Codex with a ChatGPT account."
+ *   A regular OpenAI API key uses provider `'openai'`, which is unaffected.
+ */
+export function isDeniedMiniModelId(modelId: string, piAuthProvider?: string): boolean {
+  const bare = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
+  if (bare === 'codex-mini-latest') return true;
+  if (piAuthProvider === 'openai-codex' && bare.includes('codex-mini')) return true;
+  return false;
+}
+
+/**
  * Get the mini/utility model ID for a connection.
  * Provider-aware search:
  *   - Anthropic: find any model with "haiku" in its id/name
  *   - Pi: find any model with "mini" or "flash" in its id/name
  *   - Otherwise: last model in the list
  *
- * Used for mini agent, title generation, and mini completions.
+ * Auth-flavor-aware: skips models that the user's `piAuthProvider` would reject
+ * (e.g. `gpt-5.1-codex-mini` under ChatGPT-account auth). See
+ * {@link isDeniedMiniModelId}.
  *
- * @param connection - LLM connection (or partial with models + providerType)
- * @returns Model ID string, or undefined if no models available
+ * Used for mini agent, title generation, and mini completions.
  */
-export function getMiniModel(connection: Pick<LlmConnection, 'models' | 'providerType'>): string | undefined {
+export function getMiniModel(
+  connection: Pick<LlmConnection, 'models' | 'providerType' | 'piAuthProvider'>,
+): string | undefined {
   return findSmallModel(connection);
 }
 
@@ -214,11 +235,10 @@ export function getMiniModel(connection: Pick<LlmConnection, 'models' | 'provide
  * so summarization and mini agent models can diverge independently.
  *
  * Used for response summarization and API tool summarization.
- *
- * @param connection - LLM connection (or partial with models + providerType)
- * @returns Model ID string, or undefined if no models available
  */
-export function getSummarizationModel(connection: Pick<LlmConnection, 'models' | 'providerType'>): string | undefined {
+export function getSummarizationModel(
+  connection: Pick<LlmConnection, 'models' | 'providerType' | 'piAuthProvider'>,
+): string | undefined {
   return findSmallModel(connection);
 }
 
@@ -229,8 +249,13 @@ export function getSummarizationModel(connection: Pick<LlmConnection, 'models' |
  *   - Anthropic: find "haiku"
  *   - Pi: find "mini" or "flash"
  *   - Otherwise: last model in the list
+ *
+ * Skips models denied by {@link isDeniedMiniModelId} for the connection's
+ * auth flavor.
  */
-function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType'>): string | undefined {
+function findSmallModel(
+  connection: Pick<LlmConnection, 'models' | 'providerType' | 'piAuthProvider'>,
+): string | undefined {
   if (!connection.models || connection.models.length === 0) return undefined;
 
   const toId = (m: ModelDefinition | string) => typeof m === 'string' ? m : m.id;
@@ -238,12 +263,8 @@ function findSmallModel(connection: Pick<LlmConnection, 'models' | 'providerType
   const toSearchStr = (m: ModelDefinition | string) =>
     typeof m === 'string' ? m.toLowerCase() : `${m.id} ${m.name} ${m.shortName}`.toLowerCase();
 
-  const isDeniedSmallModel = (modelId: string): boolean => {
-    const bare = modelId.startsWith('pi/') ? modelId.slice(3) : modelId;
-    return bare === 'codex-mini-latest';
-  };
-
-  const isAllowedModel = (m: ModelDefinition | string): boolean => !isDeniedSmallModel(toId(m));
+  const isAllowedModel = (m: ModelDefinition | string): boolean =>
+    !isDeniedMiniModelId(toId(m), connection.piAuthProvider);
 
   // Provider-aware keyword search
   const keywords: string[] = [];
@@ -448,12 +469,20 @@ export function getModelsForProviderType(providerType: LlmProviderType, piAuthPr
  * Format: bare model IDs (without pi/ prefix). Matched against pi/{id} or pi/{id}-*.
  */
 export const PI_PREFERRED_DEFAULTS: Record<string, string[]> = {
-  anthropic: ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
-  openai: ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
-  'openai-codex': ['gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
-  google: ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+  // TODO(opus-4.6-sunset): drop 'claude-opus-4-6' from anthropic and amazon-bedrock
+  // when Opus 4.6 is deprecated.
+  anthropic: ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  openai: ['gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
+  'openai-codex': ['gpt-5.5', 'gpt-5.2', 'gpt-5.1', 'gpt-5', 'o4-mini', 'o3', 'gpt-4o'],
+  // Stable models first so the connection-setup test (which uses
+  // getDefaultModelForConnection) lands on a reliable model.
+  // gemini-3-pro-preview and gemini-3.1-pro-preview are intermittently
+  // unresponsive on generateContent — verified against the live API in
+  // April 2026 — and are deliberately excluded from defaults.
+  google: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite-preview'],
+  deepseek: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   'github-copilot': ['claude-sonnet-4-6', 'gpt-5', 'o4-mini', 'claude-haiku-4-5'],
-  'amazon-bedrock': ['claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  'amazon-bedrock': ['claude-opus-4-7', 'claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
 };
 
 export function getDefaultModelsForConnection(providerType: LlmProviderType, piAuthProvider?: string): Array<ModelDefinition | string> {

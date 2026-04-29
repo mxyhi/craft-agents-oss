@@ -85,6 +85,8 @@ export interface ISessionManager {
     storedAttachments?: StoredAttachment[],
     options?: SendMessageOptions,
     existingMessageId?: string,
+    _isAuthRetry?: boolean,
+    onAck?: (messageId: string) => void,
   ): Promise<void>
   cancelProcessing(sessionId: string, silent?: boolean): Promise<void>
   killShell(sessionId: string, shellId: string): Promise<{ success: boolean; error?: string }>
@@ -121,6 +123,17 @@ export interface ISessionManager {
   clearPendingPlanExecution(sessionId: string): Promise<void>
   getPendingPlanExecution(sessionId: string): { planPath: string; draftInputSnapshot?: string; awaitingCompaction: boolean; executionDispatched: boolean } | null
   markCompactionComplete(sessionId: string): Promise<void>
+
+  /**
+   * Send the plan-approval "I approve this plan, please execute it" message
+   * to the session as if the user had clicked "Accept plan" in the desktop UI.
+   * If the session is in Explore (safe) mode, also switches it to allow-all
+   * so the plan can actually run without per-tool prompts.
+   *
+   * Used by the messaging gateway so Telegram/WhatsApp accept buttons produce
+   * the same server-side effect as the desktop accept button.
+   */
+  acceptPlan(sessionId: string, planPath?: string): Promise<void>
 
   // ---------------------------------------------------------------------------
   // Sharing
@@ -209,15 +222,25 @@ export interface ISessionManager {
 
   reinitializeAuth(connectionSlug?: string): Promise<void>
   completeAuthRequest(sessionId: string, result: AuthResult): Promise<void>
-  executePromptAutomation(
-    workspaceId: string,
-    workspaceRootPath: string,
-    prompt: string,
-    labels?: string[],
-    permissionMode?: PermissionMode,
-    mentions?: string[],
-    llmConnection?: string,
-    model?: string,
-    automationName?: string,
-  ): Promise<{ sessionId: string }>
+  executePromptAutomation(input: ExecutePromptAutomationInput): Promise<{ sessionId: string }>
+}
+
+/**
+ * Input for executePromptAutomation. Options-object form replaces the
+ * previous positional-args signature once the param list grew past
+ * readability — new optional fields (thinkingLevel, future cwd/permissions
+ * overrides) can be added without churn at every call site.
+ */
+export interface ExecutePromptAutomationInput {
+  workspaceId: string
+  workspaceRootPath: string
+  prompt: string
+  labels?: string[]
+  permissionMode?: PermissionMode
+  mentions?: string[]
+  llmConnection?: string
+  model?: string
+  /** Override the workspace default thinking level for the spawned session. */
+  thinkingLevel?: ThinkingLevel
+  automationName?: string
 }

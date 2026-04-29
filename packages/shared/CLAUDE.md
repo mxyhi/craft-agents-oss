@@ -29,12 +29,15 @@ cd packages/shared && bun run tsc --noEmit
 - `ClaudeAgent` is the primary class in `src/agent/claude-agent.ts`.
 - Claude SDK subprocess env is sanitized to strip Claude-specific Bedrock routing vars (`CLAUDE_CODE_USE_BEDROCK`, `AWS_BEARER_TOKEN_BEDROCK`, `ANTHROPIC_BEDROCK_BASE_URL`). Pi Bedrock uses its own AWS env path instead.
 - Backward alias export (`CraftAgent`) exists for compatibility.
+- Prefer routing new model vendors through the existing Pi path (`providerType: 'pi'` + `piAuthProvider`) unless they truly need a distinct runtime/backend. The Pi provider catalog and display metadata live in `src/config/models-pi.ts`.
 - Session lifecycle distinguishes **hard aborts** from **UI handoff interrupts**:
   - use hard aborts for true cancellation/teardown (`UserStop`, redirect fallback)
   - use handoff interrupts for pause points where control moves to the UI (`AuthRequest`, `PlanSubmitted`)
 - Remote workspace handoff summaries are injected as one-shot hidden context on the destination session's first turn.
 - WebUI source OAuth uses a stable relay redirect URI (`https://agents.craft.do/auth/callback`); the deployment-specific callback target is carried in a relay-owned outer `state` envelope and unwrapped by the router worker.
 - Automations matching is unified through canonical matcher adapters in `src/automations/utils.ts` (`matcherMatches*`). Avoid direct primitive-only matcher checks in feature code so condition gating stays consistent across app and agent events.
+- The OpenAI Chat Completions strip stream (`unified-network-interceptor.ts:createOpenAiSseStrippingStream`) emits **one consolidated SSE event per logical tool call** with `id + name + cleanArgs` together — never split across init + args-only deltas. Some downstream SDKs (Pi SDK) treat args-only deltas as new tool_calls instead of merging by index, which produces duplicate empty-id entries on parallel-tool turns from DeepSeek and other relays. `sanitizeOpenAiHistoryInPlace` recovers sessions whose history was persisted by the pre-fix split-emit version.
+- In dev / monorepo runs, the network interceptor preloads from `packages/shared/src/unified-network-interceptor.ts` directly so source changes propagate without a manual `bun run build:interceptor`. Packaged builds use `apps/electron/dist/interceptor.cjs`. See `agent/backend/internal/runtime-resolver.ts:resolveInterceptorBundlePath`.
 
 ## i18n (Internationalization)
 
@@ -128,6 +131,33 @@ Key integration points:
 - `SourceCredentialManager.refreshApiRenew()` — calls the renew endpoint
 - `TokenRefreshManager` — treats renew-endpoint sources as refreshable even without `refreshToken`
 - `server-builder.ts` — passes a token getter (not static credential) for renew-endpoint sources
+
+## `queryLlm` backend contract
+
+Every `AgentBackend.queryLlm(request: LLMQueryRequest)` implementation MUST:
+- honor `request.model` (with backend-specific fallback only when the model is
+  unresolvable/unsupported; always report the *effective* model in
+  `LLMQueryResult.model`)
+- honor `request.systemPrompt`
+
+SHOULD:
+- honor `request.outputSchema` (at minimum via prompt injection — see
+  `buildCallLlmRequest` in `agent/llm-tool.ts`, which already handles this
+  pre-backend)
+
+MAY:
+- honor `request.maxTokens` and `request.temperature` if the underlying SDK
+  supports passing these to its generation call
+
+MUST NOT:
+- return a fabricated `LLMQueryResult.model` that doesn't match what was actually
+  used — downstream UI treats this as authoritative
+
+IPC envelopes between the main process and any subprocess backend (Pi today,
+potentially others) MUST carry the full `LLMQueryRequest`, not a subset.
+A backend that invents a narrower envelope is guaranteed to drift over time
+(see #596). The round-trip invariant is guarded by
+`packages/shared/src/agent/__tests__/pi-query-llm.test.ts`.
 
 ## Source of truth
 - Package exports: `packages/shared/src/index.ts` and subpath export entries.
