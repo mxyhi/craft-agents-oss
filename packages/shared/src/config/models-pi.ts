@@ -14,7 +14,7 @@
  */
 
 import { getProviders, getModels } from '@mariozechner/pi-ai';
-import type { KnownProvider, Model, Api } from '@mariozechner/pi-ai';
+import type { KnownProvider, Model, Api, Provider } from '@mariozechner/pi-ai';
 import type { ModelDefinition } from './models.ts';
 
 // ============================================
@@ -83,6 +83,28 @@ function isBareBedrockClaudeModel(modelId: string): boolean {
   return modelId.startsWith('anthropic.claude-');
 }
 
+function createPiFallbackModel(id: string, name: string): ModelDefinition {
+  return {
+    id: `pi/${id}`,
+    name,
+    shortName: name.replace(/^DeepSeek\s+/i, ''),
+    description: 'DeepSeek model via Craft Agents Backend',
+    provider: 'pi',
+    contextWindow: 128_000,
+    supportsThinking: true,
+  };
+}
+
+const PI_PROVIDER_FALLBACK_MODELS: Partial<Record<Provider, readonly ModelDefinition[]>> = {
+  // pi-ai 0.70.2 types list DeepSeek as a KnownProvider, but the generated
+  // runtime catalog currently omits it. Keep the fork's DeepSeek connection
+  // usable until the SDK catalog catches up.
+  deepseek: [
+    createPiFallbackModel('deepseek-v4-pro', 'DeepSeek V4 Pro'),
+    createPiFallbackModel('deepseek-v4-flash', 'DeepSeek V4 Flash'),
+  ],
+};
+
 /**
  * Get Pi models for a specific auth provider directly from the Pi SDK.
  */
@@ -101,7 +123,7 @@ export function getPiModelsForAuthProvider(piAuthProvider: string): ModelDefinit
   } catch {
     // Provider not recognized by SDK — fall through
   }
-  return [];
+  return [...(PI_PROVIDER_FALLBACK_MODELS[piAuthProvider] ?? [])];
 }
 
 /**
@@ -109,7 +131,10 @@ export function getPiModelsForAuthProvider(piAuthProvider: string): ModelDefinit
  */
 export function getAllPiModels(): ModelDefinition[] {
   const allModels: ModelDefinition[] = [];
+  const sdkProviderKeys = new Set<string>();
+
   for (const provider of getProviders()) {
+    sdkProviderKeys.add(provider);
     try {
       const models = getModels(provider);
       allModels.push(...models
@@ -118,6 +143,11 @@ export function getAllPiModels(): ModelDefinition[] {
       );
     } catch {
       // Skip providers that fail
+    }
+  }
+  for (const [provider, models] of Object.entries(PI_PROVIDER_FALLBACK_MODELS)) {
+    if (models && !sdkProviderKeys.has(provider)) {
+      allModels.push(...models);
     }
   }
   return allModels;
@@ -130,7 +160,9 @@ export function getAllPiModels(): ModelDefinition[] {
 /**
  * Display metadata for Pi SDK providers.
  */
-const PI_PROVIDER_DISPLAY: Partial<Record<KnownProvider, { label: string; placeholder: string }>> = {
+type PiProviderDisplay = { label: string; placeholder: string };
+
+const PI_PROVIDER_DISPLAY: Partial<Record<Provider, PiProviderDisplay>> = {
   'anthropic':              { label: 'Anthropic',          placeholder: 'sk-ant-...' },
   'google':                 { label: 'Google AI Studio',   placeholder: 'AIza...' },
   'openai':                 { label: 'OpenAI',             placeholder: 'sk-...' },
@@ -176,7 +208,12 @@ function formatProviderName(key: string): string {
  * Get all Pi providers available for API key authentication.
  */
 export function getPiApiKeyProviders(): PiProviderInfo[] {
-  return getProviders()
+  const providerKeys = new Set<Provider>([
+    ...getProviders(),
+    ...Object.keys(PI_PROVIDER_FALLBACK_MODELS),
+  ]);
+
+  return [...providerKeys]
     .filter(p => !PI_EXCLUDED_PROVIDERS.has(p))
     .map(p => {
       const display = PI_PROVIDER_DISPLAY[p];

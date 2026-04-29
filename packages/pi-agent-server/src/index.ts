@@ -1123,10 +1123,12 @@ function handleSessionEvent(event: AgentSessionEvent): void {
       const content = (msg as { content?: Array<{ type: string; id?: string; name?: string; arguments?: unknown }> }).content;
       if (Array.isArray(content)) {
         const prefetchableToolCalls = content.filter(
-          (c) => c.type === 'toolCall' && c.name && isPrefetchableTool(c.name),
+          (c): c is { type: string; id?: string; name: string; arguments?: unknown } =>
+            c.type === 'toolCall' && typeof c.name === 'string' && isPrefetchableTool(c.name),
         );
-        if (prefetchableToolCalls.length >= 2) {
-          debugLog(`Prefetching ${prefetchableToolCalls.length} parallel ${prefetchableToolCalls[0].name} calls`);
+        const firstPrefetchableToolCall = prefetchableToolCalls[0];
+        if (prefetchableToolCalls.length >= 2 && firstPrefetchableToolCall) {
+          debugLog(`Prefetching ${prefetchableToolCalls.length} parallel ${firstPrefetchableToolCall.name} calls`);
           for (const tc of prefetchableToolCalls) {
             const requestId = `prefetch-${tc.id}`;
             const promise = new Promise<{ content: string; isError: boolean }>((resolve) => {
