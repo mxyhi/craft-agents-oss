@@ -7,6 +7,7 @@
 
 import type { ModelDefinition } from '@craft-agent/shared/config/models'
 import {
+  type CustomEndpointApi,
   type LlmConnection,
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
@@ -100,7 +101,7 @@ export function setupTestRequiresApiKey(baseUrl?: string): boolean {
  */
 export function resolveCompatPiAuthProvider(params: {
   authType: LlmConnection['authType']
-  customEndpointApi: 'openai-completions' | 'anthropic-messages'
+  customEndpointApi: CustomEndpointApi
 }): LlmConnection['piAuthProvider'] | undefined {
   if (params.authType === 'none') {
     return undefined

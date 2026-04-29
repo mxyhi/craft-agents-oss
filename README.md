@@ -305,6 +305,7 @@ For TLS connections (`wss://`), use `--tls-ca <path>` for self-signed certificat
 | `--model <id>` | (provider default) | Model ID (e.g., `claude-sonnet-4-5-20250929`, `gpt-4o`, `gemini-2.0-flash`) |
 | `--api-key <key>` | — | API key (or `$LLM_API_KEY`, or provider-specific env var) |
 | `--base-url <url>` | — | Custom API endpoint for proxies or self-hosted models |
+| `--wire-api <api>` | `auto` | Custom endpoint protocol: `openai-completions`, `anthropic-messages`, or `codex-responses` |
 
 The `run` command is fully self-contained — it spawns a headless server, creates a session, sends the prompt, streams the response, and exits. No separate server setup needed. An API key is resolved from `--api-key`, `$LLM_API_KEY`, or a provider-specific env var (e.g., `$ANTHROPIC_API_KEY`, `$OPENAI_API_KEY`).
 

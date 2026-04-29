@@ -67,10 +67,15 @@ import { buildCallLlmRequest, withTimeout, LLM_QUERY_TIMEOUT_MS } from '../../sh
 import type { LLMQueryRequest, LLMQueryResult } from '../../shared/src/agent/llm-tool.ts';
 import { PI_TOOL_NAME_MAP, THINKING_TO_PI } from '../../shared/src/agent/backend/pi/constants.ts';
 import { getDefaultSummarizationModel } from '../../shared/src/config/models.ts';
+import type { CustomEndpointApi } from '../../shared/src/config/llm-connections.ts';
 import { createWebFetchTool } from './tools/web-fetch.ts';
 import { resolveSearchProvider } from './tools/search/resolve-provider.ts';
 import { createSearchTool } from './tools/search/create-search-tool.ts';
 import { allowCraftMetadataProperties, stripCraftMetadata } from './craft-metadata-schema.ts';
+import {
+  CODEX_CLI_REQUEST_HEADERS,
+  configureCodexCliRequestSimulation,
+} from './codex-cli-request-simulation.ts';
 
 // ============================================================
 // Types — JSONL Protocol
@@ -81,9 +86,6 @@ type PiCredential =
   | { type: 'api_key'; key: string }
   | { type: 'oauth'; access: string; refresh: string; expires: number }
   | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string };
-
-/** Custom endpoint protocol — determines which streaming adapter Pi SDK uses */
-type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
 
 /** Init message from main process — configures the Pi agent server */
 interface InitMessage {
@@ -434,11 +436,13 @@ function registerCustomEndpointModels(
     }
   }
   const allIds = [...customEndpointModelIds];
+  const isCodexResponses = api === 'openai-codex-responses';
   registry.registerProvider('custom-endpoint', {
     baseUrl,
     apiKey: resolveCustomEndpointApiKey(),
     api,
     authHeader: true,
+    ...(isCodexResponses ? { headers: CODEX_CLI_REQUEST_HEADERS } : {}),
     models: allIds.map(id => buildCustomEndpointModelDef(
       id,
       { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
@@ -484,6 +488,9 @@ function createAuthenticatedRegistry(): {
   const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
   if (hasCustomEndpoint && initConfig?.customEndpoint) {
     const { api } = initConfig.customEndpoint;
+    configureCodexCliRequestSimulation(
+      api === 'openai-codex-responses' ? initConfig.baseUrl!.trim() : undefined,
+    );
     const modelEntries: CustomModelEntry[] = (initConfig.customModels?.length
       ? initConfig.customModels
       : [initConfig.model || 'default']
@@ -493,7 +500,10 @@ function createAuthenticatedRegistry(): {
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
     registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
+    configureCodexCliRequestSimulation(undefined);
     debugLog('Custom endpoint without protocol config — models may not resolve. Set customEndpoint.api for proper routing.');
+  } else {
+    configureCodexCliRequestSimulation(undefined);
   }
 
   return { authStorage, modelRegistry };

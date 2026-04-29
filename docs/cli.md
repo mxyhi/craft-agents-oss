@@ -141,12 +141,14 @@ The `run` command is fully self-contained — it spawns a headless server, creat
 | `--model <id>` | `LLM_MODEL` | (provider default) | Model ID (e.g., `claude-sonnet-4-5-20250929`, `gpt-4o`, `gemini-2.0-flash`) |
 | `--api-key <key>` | `LLM_API_KEY` | (provider env) | API key — also checks provider-specific vars like `$OPENAI_API_KEY` |
 | `--base-url <url>` | `LLM_BASE_URL` | — | Custom endpoint for proxies, OpenRouter, or self-hosted models |
+| `--wire-api <api>` | `LLM_WIRE_API` | `auto` | Custom endpoint protocol: `openai-completions`, `anthropic-messages`, or `codex-responses` |
 
 ```bash
 # Multi-provider examples
 craft-cli run --provider openai --model gpt-4o "Summarize this repo"
 GOOGLE_API_KEY=... craft-cli run --provider google --model gemini-2.0-flash "Hello"
 craft-cli run --provider anthropic --base-url https://openrouter.ai/api/v1 --api-key $OR_KEY "Hello"
+craft-cli run --provider openai --base-url https://proxy.example/backend-api --wire-api codex-responses --api-key $OPENAI_API_KEY "Hello"
 ```
 
 Prompt can also be piped via stdin:
