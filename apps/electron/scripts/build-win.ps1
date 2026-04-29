@@ -346,7 +346,11 @@ while (-not $builderSuccess -and $builderRetry -lt $maxBuilderRetries) {
         Start-Sleep -Seconds 1
     }
 
-    npx electron-builder --win --x64 2>&1 | Tee-Object -Variable builderOutput
+    # Run through cmd.exe so stderr is merged before PowerShell sees it.
+    # Node 24 can emit deprecation warnings on stderr; with ErrorActionPreference=Stop,
+    # PowerShell may wrap those stderr lines as NativeCommandError before LASTEXITCODE
+    # can be checked.
+    cmd.exe /d /c "npx electron-builder --win --x64 2>&1" | Tee-Object -Variable builderOutput
 
     if ($LASTEXITCODE -eq 0) {
         $builderSuccess = $true
