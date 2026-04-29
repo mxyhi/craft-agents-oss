@@ -3,32 +3,34 @@ import {
   applyCodexCliRequestHeaders,
   configureCodexCliRequestSimulation,
   restoreCodexCliRequestSimulation,
-  resolveCodexResponsesUrl,
+  resolveCustomEndpointRuntimeApi,
   rewriteCodexCliFetchInit,
   shouldApplyCodexCliRequestHeaders,
 } from './codex-cli-request-simulation.ts'
 
 describe('Codex CLI request simulation', () => {
-  it('resolves Codex Responses URL like the Pi Codex provider', () => {
-    expect(resolveCodexResponsesUrl('https://chatgpt.com/backend-api')).toBe(
-      'https://chatgpt.com/backend-api/codex/responses',
-    )
-    expect(resolveCodexResponsesUrl('https://proxy.example/backend-api/codex')).toBe(
-      'https://proxy.example/backend-api/codex/responses',
-    )
-    expect(resolveCodexResponsesUrl('https://proxy.example/backend-api/codex/responses')).toBe(
-      'https://proxy.example/backend-api/codex/responses',
-    )
+  it('uses OpenAI Responses runtime adapter for Codex CLI proxy simulation', () => {
+    expect(resolveCustomEndpointRuntimeApi('openai-codex-responses')).toBe('openai-responses')
+    expect(resolveCustomEndpointRuntimeApi('openai-completions')).toBe('openai-completions')
+    expect(resolveCustomEndpointRuntimeApi('anthropic-messages')).toBe('anthropic-messages')
   })
 
-  it('matches only the configured Codex Responses endpoint URL', () => {
+  it('matches requests under the configured custom endpoint without simulating endpoint paths', () => {
     expect(shouldApplyCodexCliRequestHeaders(
-      'https://proxy.example/backend-api/codex/responses',
-      'https://proxy.example/backend-api',
+      'https://proxy.example/v1/responses',
+      'https://proxy.example',
     )).toBe(true)
     expect(shouldApplyCodexCliRequestHeaders(
-      'https://proxy.example/v1/chat/completions',
-      'https://proxy.example/backend-api',
+      'https://proxy.example/v1/responses',
+      'https://proxy.example/v1',
+    )).toBe(true)
+    expect(shouldApplyCodexCliRequestHeaders(
+      'https://proxy.example/other/responses',
+      'https://proxy.example/v1',
+    )).toBe(false)
+    expect(shouldApplyCodexCliRequestHeaders(
+      'https://other.example/v1/responses',
+      'https://proxy.example/v1',
     )).toBe(false)
   })
 
@@ -52,9 +54,9 @@ describe('Codex CLI request simulation', () => {
     expect(headers.get('x-client-request-id')).toBe('session-1')
   })
 
-  it('rewrites fetch init headers for the configured Codex endpoint', () => {
+  it('rewrites fetch init headers for requests under the configured custom endpoint', () => {
     const init = rewriteCodexCliFetchInit(
-      'https://proxy.example/backend-api/codex/responses',
+      'https://proxy.example/v1/responses',
       {
         method: 'POST',
         headers: {
@@ -62,7 +64,7 @@ describe('Codex CLI request simulation', () => {
           'User-Agent': 'pi (darwin)',
         },
       },
-      'https://proxy.example/backend-api',
+      'https://proxy.example/v1',
     )
 
     const headers = new Headers(init?.headers)
@@ -70,14 +72,14 @@ describe('Codex CLI request simulation', () => {
     expect(headers.get('User-Agent')).toBe('codex_cli_rs/0.125.0')
   })
 
-  it('wraps global fetch only for the active Codex Responses endpoint', async () => {
+  it('wraps global fetch only for the active custom endpoint base URL', async () => {
     const originalFetch = globalThis.fetch
     let codexHeaders: Headers | undefined
     let otherHeaders: Headers | undefined
     const stubFetch = Object.assign(
       async (input: Parameters<typeof globalThis.fetch>[0], init?: Parameters<typeof globalThis.fetch>[1]) => {
         const inputUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-        if (inputUrl.endsWith('/codex/responses')) {
+        if (inputUrl.startsWith('https://proxy.example/v1/')) {
           codexHeaders = new Headers(init?.headers)
         } else {
           otherHeaders = new Headers(init?.headers)
@@ -89,12 +91,12 @@ describe('Codex CLI request simulation', () => {
 
     try {
       globalThis.fetch = stubFetch
-      configureCodexCliRequestSimulation('https://proxy.example/backend-api')
+      configureCodexCliRequestSimulation('https://proxy.example/v1')
 
-      await fetch('https://proxy.example/backend-api/codex/responses', {
+      await fetch('https://proxy.example/v1/responses', {
         headers: { originator: 'pi', 'User-Agent': 'pi (darwin)' },
       })
-      await fetch('https://proxy.example/v1/chat/completions', {
+      await fetch('https://proxy.example/other/responses', {
         headers: { originator: 'pi' },
       })
 
