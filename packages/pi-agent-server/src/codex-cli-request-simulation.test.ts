@@ -8,6 +8,8 @@ import {
   shouldApplyCodexCliRequestHeaders,
 } from './codex-cli-request-simulation.ts'
 
+type JsonObject = Record<string, unknown>
+
 describe('Codex CLI request simulation', () => {
   it('uses OpenAI Responses runtime adapter for Codex CLI proxy simulation', () => {
     expect(resolveCustomEndpointRuntimeApi('openai-codex-responses')).toBe('openai-responses')
@@ -72,6 +74,72 @@ describe('Codex CLI request simulation', () => {
     expect(headers.get('User-Agent')).toBe('codex_cli_rs/0.125.0')
   })
 
+  it('removes persisted output item ids from store=false Responses history', () => {
+    const init = rewriteCodexCliFetchInit(
+      'https://proxy.example/v1/responses',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-5.5',
+          stream: true,
+          store: false,
+          include: ['reasoning.encrypted_content'],
+          input: [
+            {
+              type: 'reasoning',
+              id: 'rs_0acfcd8044d8f12f0169f22a1782f0819ab0d65374092d7ee8',
+              summary: [],
+              encrypted_content: 'encrypted-reasoning',
+            },
+            {
+              type: 'message',
+              id: 'msg_123',
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'done' }],
+            },
+            {
+              type: 'function_call',
+              id: 'fc_123',
+              call_id: 'call_123',
+              name: 'tool',
+              arguments: '{}',
+            },
+            {
+              type: 'function_call_output',
+              call_id: 'call_123',
+              output: 'ok',
+            },
+            {
+              role: 'user',
+              content: [{ type: 'input_text', text: 'next' }],
+            },
+          ],
+        }),
+      },
+      'https://proxy.example/v1',
+    )
+
+    expect(typeof init?.body).toBe('string')
+    if (typeof init?.body !== 'string') {
+      throw new Error('expected rewritten request body to be a string')
+    }
+    const parsed: unknown = JSON.parse(init.body)
+    if (!isJsonObject(parsed) || !Array.isArray(parsed.input) || !parsed.input.every(isJsonObject)) {
+      throw new Error('expected rewritten request body to contain object input items')
+    }
+    const input = parsed.input
+    expect(input[0]).toEqual({
+      type: 'reasoning',
+      summary: [],
+      encrypted_content: 'encrypted-reasoning',
+    })
+    expect(input[1].id).toBeUndefined()
+    expect(input[2].id).toBeUndefined()
+    expect(input[3].call_id).toBe('call_123')
+    expect(input[4].role).toBe('user')
+  })
+
   it('wraps global fetch only for the active custom endpoint base URL', async () => {
     const originalFetch = globalThis.fetch
     let codexHeaders: Headers | undefined
@@ -109,3 +177,7 @@ describe('Codex CLI request simulation', () => {
     }
   })
 })
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}

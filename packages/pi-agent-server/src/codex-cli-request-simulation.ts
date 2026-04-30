@@ -13,6 +13,18 @@ export const CODEX_CLI_REQUEST_HEADERS: Record<string, string> = {
 type FetchInput = Parameters<typeof globalThis.fetch>[0];
 type FetchInit = Parameters<typeof globalThis.fetch>[1];
 type CustomEndpointRuntimeApi = Exclude<CustomEndpointApi, 'openai-codex-responses'> | 'openai-responses';
+type JsonObject = Record<string, unknown>;
+
+const OUTPUT_ITEM_TYPES_WITH_PERSISTED_IDS = new Set([
+  'reasoning',
+  'message',
+  'function_call',
+  'web_search_call',
+  'local_shell_call',
+  'custom_tool_call',
+  'tool_search_call',
+  'image_generation_call',
+]);
 
 let restoreFetch: (() => void) | undefined;
 let activeBaseUrl: string | undefined;
@@ -51,7 +63,13 @@ export function rewriteCodexCliFetchInit(input: FetchInput, init: FetchInit, bas
   }
 
   const nextInit: RequestInit = init ? { ...init } : {};
-  nextInit.headers = applyCodexCliRequestHeaders(init?.headers ?? resolveFetchInputHeaders(input));
+  const nextHeaders = applyCodexCliRequestHeaders(init?.headers ?? resolveFetchInputHeaders(input));
+  const bodyRewrite = rewriteCodexCliRequestBody(init?.body);
+  if (bodyRewrite.changed) {
+    nextInit.body = bodyRewrite.body;
+    nextHeaders.delete('content-length');
+  }
+  nextInit.headers = nextHeaders;
   return nextInit;
 }
 
@@ -93,4 +111,63 @@ function resolveFetchInputUrl(input: FetchInput): string | undefined {
 function resolveFetchInputHeaders(input: FetchInput): HeadersInit | undefined {
   if (typeof Request !== 'undefined' && input instanceof Request) return input.headers;
   return undefined;
+}
+
+function rewriteCodexCliRequestBody(body: BodyInit | null | undefined): {
+  body: BodyInit | null | undefined;
+  changed: boolean;
+} {
+  if (typeof body !== 'string') {
+    return { body, changed: false };
+  }
+
+  const payload = parseJsonObject(body);
+  if (!payload || payload.store !== false || !Array.isArray(payload.input)) {
+    return { body, changed: false };
+  }
+
+  let changed = false;
+  const input = payload.input.map((item) => {
+    const normalized = normalizeStoreFalseResponsesInputItem(item);
+    if (normalized !== item) changed = true;
+    return normalized;
+  });
+
+  if (!changed) {
+    return { body, changed: false };
+  }
+
+  return {
+    body: JSON.stringify({ ...payload, input }),
+    changed: true,
+  };
+}
+
+function normalizeStoreFalseResponsesInputItem(item: unknown): unknown {
+  if (!isJsonObject(item) || !shouldStripPersistedItemId(item)) {
+    return item;
+  }
+
+  const rest: JsonObject = { ...item };
+  delete rest.id;
+  return rest;
+}
+
+function shouldStripPersistedItemId(item: JsonObject): boolean {
+  return typeof item.id === 'string'
+    && typeof item.type === 'string'
+    && OUTPUT_ITEM_TYPES_WITH_PERSISTED_IDS.has(item.type);
+}
+
+function parseJsonObject(value: string): JsonObject | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isJsonObject(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
