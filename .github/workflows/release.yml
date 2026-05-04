@@ -118,6 +118,8 @@ jobs:
             libfuse2
 
       - name: Build release package
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: ${{ matrix.build_command }}
 
       - name: Upload assets to GitHub Release
