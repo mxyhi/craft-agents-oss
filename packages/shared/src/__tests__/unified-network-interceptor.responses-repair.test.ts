@@ -11,27 +11,20 @@ describe('unified-network-interceptor responses-history repair (#613)', () => {
     validateOpenAiResponsesBody = mod.validateOpenAiResponsesBody;
   });
 
-  it('synthesizes a deterministic call_id when function_call is missing one', () => {
+  it('normalizes Codex-style call ids instead of synthesizing repaired ids', () => {
     const input: Array<Record<string, unknown>> = [
-      { type: 'function_call', name: 'ls', arguments: '{"path":"/tmp"}' },
+      { type: 'function_call', id: 'call_1', name: 'ls', arguments: '{"path":"/tmp"}' },
+      { type: 'function_call_output', call_id: 'call_1', output: 'real' },
+      { type: 'message', role: 'assistant', call_id: 'call_noise', content: [] },
     ];
-    const result = repairResponsesHistoryInPlace(input);
-    expect(result.synthesizedCallIds).toBe(1);
+    const result = repairResponsesHistoryInPlace(input, { store: false });
+    expect(result.normalizedCallIds).toBe(3);
     expect(result.droppedOrphans).toBe(0);
-    expect(typeof input[0]!.call_id).toBe('string');
-    expect((input[0]!.call_id as string).startsWith('repaired_')).toBe(true);
-  });
-
-  it('synthesizes a stable call_id given the same name + arguments', () => {
-    const a: Array<Record<string, unknown>> = [
-      { type: 'function_call', name: 'ls', arguments: '{"x":1}' },
-    ];
-    const b: Array<Record<string, unknown>> = [
-      { type: 'function_call', name: 'ls', arguments: '{"x":1}' },
-    ];
-    repairResponsesHistoryInPlace(a);
-    repairResponsesHistoryInPlace(b);
-    expect(a[0]!.call_id).toBe(b[0]!.call_id);
+    expect(input).toEqual([
+      { type: 'function_call', name: 'ls', arguments: '{"path":"/tmp"}', call_id: 'fc1' },
+      { type: 'function_call_output', call_id: 'fc1', output: 'real' },
+      { type: 'message', role: 'assistant', content: [] },
+    ]);
   });
 
   it('drops function_call_output entries that reference unknown call_ids', () => {
@@ -40,33 +33,34 @@ describe('unified-network-interceptor responses-history repair (#613)', () => {
       { type: 'function_call_output', call_id: 'call_ghost', output: 'orphan' },
       { type: 'function_call_output', call_id: 'call_1', output: 'real' },
     ];
-    const result = repairResponsesHistoryInPlace(input);
+    const result = repairResponsesHistoryInPlace(input, { store: false });
+    expect(result.normalizedCallIds).toBe(3);
     expect(result.droppedOrphans).toBe(1);
     expect(input.length).toBe(2);
-    expect((input[1] as { call_id: string }).call_id).toBe('call_1');
+    expect(input).toEqual([
+      { type: 'function_call', call_id: 'fc1', name: 'ls', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'fc1', output: 'real' },
+    ]);
   });
 
-  it('keeps function_call_output that references a synthesized call_id', () => {
-    // Pi SDK drops call_id on the function_call but the output still has one;
-    // repair must synthesize for the call AND link the output.
+  it('does not invent call ids when no source id exists', () => {
     const input: Array<Record<string, unknown>> = [
       { type: 'function_call', name: 'ls', arguments: '{}' },
-      { type: 'function_call_output', call_id: 'should_be_dropped', output: 'orphan' },
     ];
     const result = repairResponsesHistoryInPlace(input);
-    expect(result.synthesizedCallIds).toBe(1);
-    // output gets dropped because its call_id doesn't match the synthesized one
-    expect(result.droppedOrphans).toBe(1);
+    expect(result.normalizedCallIds).toBe(0);
     expect(input.length).toBe(1);
+    expect(input[0]!.call_id).toBeUndefined();
+    expect(() => validateOpenAiResponsesBody({ input })).toThrow('missing call_id');
   });
 
   it('is a no-op when history is already well-formed', () => {
     const input: Array<Record<string, unknown>> = [
-      { type: 'function_call', call_id: 'call_1', name: 'ls', arguments: '{}' },
-      { type: 'function_call_output', call_id: 'call_1', output: 'a' },
+      { type: 'function_call', call_id: 'fc1', name: 'ls', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'fc1', output: 'a' },
     ];
     const result = repairResponsesHistoryInPlace(input);
-    expect(result.synthesizedCallIds).toBe(0);
+    expect(result.normalizedCallIds).toBe(0);
     expect(result.droppedOrphans).toBe(0);
     expect(input.length).toBe(2);
   });
@@ -82,17 +76,17 @@ describe('unified-network-interceptor responses-history repair (#613)', () => {
     expect(result.droppedReasoningItems).toBe(1);
     expect(result.droppedReasoningReferences).toBe(1);
     expect(input).toEqual([
-      { type: 'message', id: 'msg_1', role: 'assistant', content: [] },
-      { type: 'function_call', call_id: 'call_1', name: 'ls', arguments: '{}' },
+      { type: 'message', role: 'assistant', content: [] },
+      { type: 'function_call', call_id: 'fc1', name: 'ls', arguments: '{}' },
     ]);
   });
 
   it('produces a body that passes validation after repair (end-to-end)', () => {
     const input: Array<Record<string, unknown>> = [
-      { type: 'function_call', name: 'ls', arguments: '{}' },
-      { type: 'function_call_output', call_id: 'orphan', output: 'gone' },
+      { type: 'function_call', id: 'call_1', name: 'ls', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_1', output: 'done' },
     ];
-    repairResponsesHistoryInPlace(input);
+    repairResponsesHistoryInPlace(input, { store: false });
     expect(() => validateOpenAiResponsesBody({ input })).not.toThrow();
   });
 });

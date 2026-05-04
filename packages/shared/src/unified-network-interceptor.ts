@@ -1667,19 +1667,21 @@ export function validateOpenAiResponsesBody(body: Record<string, unknown>): void
  * In-place repair of Responses-API `input[]` arrays that arrive with structural
  * defects we can recover from. Mutates `input` and returns the number of repairs.
  *
- * - `function_call` entries missing `call_id` get a deterministic synthesized id.
+ * - Codex-style `call_*` ids are normalized to `fc*` on tool call items.
+ * - Tool call items missing `call_id` reuse their existing `id` when present.
+ * - Non-tool items cannot carry stale `call_id` fields.
  * - `function_call_output` entries referencing an unknown `call_id` are dropped
  *   (the upstream would 400 anyway; better to lose one tool result than the turn).
  *
  * Exported for focused unit tests.
  */
 export function repairResponsesHistoryInPlace(input: Array<Record<string, unknown>>, options: { store?: unknown } = {}): {
-  synthesizedCallIds: number;
+  normalizedCallIds: number;
   droppedOrphans: number;
   droppedReasoningItems: number;
   droppedReasoningReferences: number;
 } {
-  let synthesizedCallIds = 0;
+  let normalizedCallIds = 0;
   let droppedOrphans = 0;
   let droppedReasoningItems = 0;
   let droppedReasoningReferences = 0;
@@ -1705,29 +1707,60 @@ export function repairResponsesHistoryInPlace(input: Array<Record<string, unknow
     }
   }
 
-  // First pass: synthesize missing call_ids on function_call entries so later
-  // entries can reference them.
+  // First pass: mirror Codex/sub2api tool-call id normalization without
+  // inventing ids that the provider never produced.
   for (let i = 0; i < input.length; i++) {
     const entry = input[i];
     if (!entry) continue;
-    if (entry.type !== 'function_call') continue;
-    if (typeof entry.call_id === 'string' && entry.call_id.length > 0) {
-      knownCallIds.add(entry.call_id);
+    const type = typeof entry.type === 'string' ? entry.type : '';
+
+    if (type === 'item_reference') {
+      if (typeof entry.id === 'string' && entry.id.startsWith('call_')) {
+        entry.id = normalizeCodexCallId(entry.id);
+        normalizedCallIds++;
+      }
       continue;
     }
-    const name = typeof entry.name === 'string' ? entry.name : 'unknown';
-    const argsHash = typeof entry.arguments === 'string'
-      ? hashShortString(entry.arguments)
-      : '0';
-    const synthetic = `repaired_${i}_${name}_${argsHash}`;
-    entry.call_id = synthetic;
-    knownCallIds.add(synthetic);
-    synthesizedCallIds++;
-    debugLog(`[OpenAI Responses Repair] Synthesized call_id "${synthetic}" for input[${i}] (name=${name})`);
+
+    if (isCodexToolCallItemType(type)) {
+      let callId = readNonEmptyString(entry.call_id);
+      if (!callId) {
+        callId = readNonEmptyString(entry.id);
+        if (callId) {
+          entry.call_id = callId;
+          normalizedCallIds++;
+        }
+      }
+
+      if (callId) {
+        const normalized = normalizeCodexCallId(callId);
+        if (normalized !== callId) {
+          entry.call_id = normalized;
+          normalizedCallIds++;
+          callId = normalized;
+        }
+      }
+
+      if (type === 'function_call' && callId) {
+        knownCallIds.add(callId);
+      }
+
+      if (isNameRequiredCodexToolCallItemType(type) && !readNonEmptyString(entry.name)) {
+        entry.name = readNonEmptyString(entry.tool_name)
+          || readFunctionName(entry.function)
+          || 'tool';
+      }
+    } else if ('call_id' in entry) {
+      delete entry.call_id;
+    }
+
+    if (options.store === false && 'id' in entry) {
+      delete entry.id;
+    }
   }
 
-  if (synthesizedCallIds === 0 && input.every(e => e.type !== 'function_call_output')) {
-    return { synthesizedCallIds, droppedOrphans, droppedReasoningItems, droppedReasoningReferences };
+  if (input.every(e => e.type !== 'function_call_output')) {
+    return { normalizedCallIds, droppedOrphans, droppedReasoningItems, droppedReasoningReferences };
   }
 
   // Second pass: drop orphan function_call_output entries.
@@ -1743,20 +1776,55 @@ export function repairResponsesHistoryInPlace(input: Array<Record<string, unknow
     }
   }
 
-  return { synthesizedCallIds, droppedOrphans, droppedReasoningItems, droppedReasoningReferences };
+  return { normalizedCallIds, droppedOrphans, droppedReasoningItems, droppedReasoningReferences };
 }
 
 function isResponsesReasoningItemId(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('rs_');
 }
 
-/** Tiny stable hash for synthesizing deterministic call_ids. Not a security primitive. */
-function hashShortString(input: string): string {
-  let h = 5381;
-  for (let i = 0; i < input.length; i++) {
-    h = ((h << 5) + h + input.charCodeAt(i)) | 0;
+function normalizeCodexCallId(id: string): string {
+  if (!id || id.startsWith('fc')) return id;
+  if (id.startsWith('call_')) return `fc${id.slice('call_'.length)}`;
+  return `fc_${id}`;
+}
+
+function readNonEmptyString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function readFunctionName(value: unknown): string {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
+  return readNonEmptyString((value as { name?: unknown }).name);
+}
+
+function isCodexToolCallItemType(type: string): boolean {
+  switch (type) {
+    case 'function_call':
+    case 'tool_call':
+    case 'local_shell_call':
+    case 'tool_search_call':
+    case 'custom_tool_call':
+    case 'mcp_tool_call':
+    case 'function_call_output':
+    case 'mcp_tool_call_output':
+    case 'custom_tool_call_output':
+    case 'tool_search_output':
+      return true;
+    default:
+      return false;
   }
-  return Math.abs(h).toString(36);
+}
+
+function isNameRequiredCodexToolCallItemType(type: string): boolean {
+  switch (type) {
+    case 'function_call':
+    case 'custom_tool_call':
+    case 'mcp_tool_call':
+      return true;
+    default:
+      return false;
+  }
 }
 
 // ============================================================================
