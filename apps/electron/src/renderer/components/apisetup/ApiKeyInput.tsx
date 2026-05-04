@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from "cmdk"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -25,12 +26,15 @@ import { cn } from "@/lib/utils"
 import { Check, ChevronDown, Eye, EyeOff, Loader2 } from "lucide-react"
 import { pickTierDefaults, resolveTierModels, type PiModelInfo } from "./tier-models"
 import {
+  buildCustomEndpointConfigForSubmit,
+  CUSTOM_ENDPOINT_PROTOCOL_OPTIONS,
   resolvePiAuthProviderForSubmit,
   resolvePresetStateForBaseUrlChange,
+  shouldShowCodexCliHeadersSwitch,
   type PresetKey,
 } from "./submit-helpers"
 
-import type { CustomEndpointApi, CustomEndpointConfig } from '@config/llm-connections'
+import { resolveCustomEndpointPiAuthProvider, type CustomEndpointApi, type CustomEndpointConfig } from '@config/llm-connections'
 
 export type ApiKeyStatus = 'idle' | 'validating' | 'success' | 'error'
 
@@ -79,6 +83,8 @@ export interface ApiKeyInputProps {
     models?: string[]
     /** Pre-fill the protocol toggle for custom endpoints */
     customApi?: CustomEndpointApi
+    /** Pre-fill Codex CLI header simulation for Responses custom endpoints */
+    simulateCodexCliHeaders?: boolean
   }
 }
 
@@ -193,6 +199,7 @@ export function ApiKeyInput({
   )
   const [connectionDefaultModel, setConnectionDefaultModel] = useState(initialValues?.connectionDefaultModel ?? '')
   const [customApi, setCustomApi] = useState<CustomEndpointApi>(initialValues?.customApi ?? 'openai-completions')
+  const [simulateCodexCliHeaders, setSimulateCodexCliHeaders] = useState(initialValues?.simulateCodexCliHeaders ?? false)
   const [modelError, setModelError] = useState<string | null>(null)
 
   // Bedrock auth state
@@ -386,9 +393,11 @@ export function ApiKeyInput({
 
     // Include custom endpoint protocol when user configured a custom base URL
     const isCustomEndpoint = activePreset === 'custom' && !!effectiveBaseUrl
-    const customEndpoint = isCustomEndpoint ? { api: customApi } : undefined
+    const customEndpoint = isCustomEndpoint
+      ? buildCustomEndpointConfigForSubmit(customApi, simulateCodexCliHeaders)
+      : undefined
     const resolvedPiAuthProvider = isCustomEndpoint
-      ? (customApi === 'anthropic-messages' ? 'anthropic' : 'openai')
+      ? resolveCustomEndpointPiAuthProvider(customApi)
       : effectivePiAuthProvider
 
     onSubmit({
@@ -504,10 +513,7 @@ export function ApiKeyInput({
             "bg-foreground-2",
             isDisabled && "opacity-50 pointer-events-none"
           )}>
-            {([
-              { value: 'openai-completions' as const, label: 'OpenAI Compatible' },
-              { value: 'anthropic-messages' as const, label: 'Anthropic Compatible' },
-            ]).map(({ value, label }) => (
+            {CUSTOM_ENDPOINT_PROTOCOL_OPTIONS.map(({ value, label }) => (
               <button
                 key={value}
                 type="button"
@@ -527,6 +533,20 @@ export function ApiKeyInput({
           <p className="text-xs text-foreground/30">
             Most third-party APIs (Ollama, vLLM, DashScope) use OpenAI Compatible.
           </p>
+          {shouldShowCodexCliHeadersSwitch(customApi) && (
+            <div className="flex min-h-9 items-center justify-between rounded-md bg-foreground-2 px-3 py-2 shadow-minimal">
+              <Label htmlFor="codex-cli-headers" className="text-xs font-medium text-foreground/70">
+                Codex CLI headers
+              </Label>
+              <Switch
+                id="codex-cli-headers"
+                checked={simulateCodexCliHeaders}
+                onCheckedChange={setSimulateCodexCliHeaders}
+                disabled={isDisabled}
+                aria-label="Codex CLI headers"
+              />
+            </div>
+          )}
         </div>
       )}
 

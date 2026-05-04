@@ -1,4 +1,33 @@
+import type { CustomEndpointApi, CustomEndpointConfig } from '@config/llm-connections'
+
 export type PresetKey = string
+
+interface CustomEndpointProtocolOption {
+  value: CustomEndpointApi
+  label: string
+}
+
+export const CUSTOM_ENDPOINT_PROTOCOL_OPTIONS = [
+  { value: 'openai-completions', label: 'OpenAI Compatible' },
+  { value: 'openai-responses', label: 'OpenAI Responses' },
+  { value: 'anthropic-messages', label: 'Anthropic Compatible' },
+] as const satisfies readonly CustomEndpointProtocolOption[]
+
+export function shouldShowCodexCliHeadersSwitch(api: CustomEndpointApi) {
+  return api === 'openai-responses'
+}
+
+export function buildCustomEndpointConfigForSubmit(
+  api: CustomEndpointApi,
+  simulateCodexCliHeaders: boolean,
+): CustomEndpointConfig {
+  return {
+    api,
+    ...(shouldShowCodexCliHeadersSwitch(api) && simulateCodexCliHeaders
+      ? { simulateCodexCliHeaders: true }
+      : {}),
+  }
+}
 
 /**
  * Preset keys that are regional variants of a canonical Pi auth provider.

@@ -46,6 +46,19 @@ export const apiKeyInputComponents: ComponentEntry[] = [
         },
       },
       {
+        name: 'Empty (OpenAI Responses)',
+        description: 'Custom preset, OpenAI Responses protocol selected',
+        props: {
+          providerType: 'pi_api_key',
+          initialValues: {
+            activePreset: 'custom',
+            baseUrl: 'https://api.openai.com/v1',
+            customApi: 'openai-responses',
+            simulateCodexCliHeaders: true,
+          },
+        },
+      },
+      {
         name: 'Empty (Anthropic compat)',
         description: 'Custom preset, Anthropic protocol selected',
         props: {

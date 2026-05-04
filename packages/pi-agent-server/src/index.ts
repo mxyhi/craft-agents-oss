@@ -65,6 +65,12 @@ import {
   type CustomEndpointModelEntry,
   type CustomEndpointModelOverrides,
 } from './custom-endpoint-models.ts';
+import {
+  resolveCustomEndpointRuntimeBaseUrl,
+  resolveCustomEndpointRequestHeaders,
+  withCodexResponsesCompat,
+  type CustomEndpointCodexHeaderConfig,
+} from './custom-endpoint-codex-headers.ts';
 
 // Direct source imports from shared (bundled by bun build)
 import { handleLargeResponse, estimateTokens, TOKEN_LIMIT } from '../../shared/src/utils/large-response.ts';
@@ -89,7 +95,11 @@ type PiCredential =
   | { type: 'iam'; accessKeyId: string; secretAccessKey: string; region?: string; sessionToken?: string };
 
 /** Custom endpoint protocol — determines which streaming adapter Pi SDK uses */
-type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+type CustomEndpointApi =
+  | 'openai-completions'
+  | 'openai-responses'
+  | 'anthropic-messages';
+type CustomEndpointRuntimeConfig = CustomEndpointCodexHeaderConfig & { supportsImages?: boolean };
 
 /** Init message from main process — configures the Pi agent server */
 interface InitMessage {
@@ -112,7 +122,7 @@ interface InitMessage {
   branchFromSdkSessionId?: string;
   branchFromSessionPath?: string;
   branchFromSdkTurnId?: string;
-  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
+  customEndpoint?: CustomEndpointRuntimeConfig;
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
   piAuth?: { provider: string; credential: PiCredential };
 }
@@ -417,10 +427,11 @@ const customModelOverrides = new Map<string, CustomEndpointModelOverrides>();
 
 function registerCustomEndpointModels(
   registry: PiModelRegistry,
-  api: CustomEndpointApi,
+  customEndpoint: CustomEndpointRuntimeConfig,
   baseUrl: string,
   models: CustomEndpointModelEntry[],
 ): void {
+  const { api } = customEndpoint;
   for (const m of models) {
     customEndpointModelIds.add(m.id);
     if (m.contextWindow || m.supportsImages !== undefined) {
@@ -431,18 +442,24 @@ function registerCustomEndpointModels(
     }
   }
   const allIds = [...customEndpointModelIds];
+  const requestHeaders = resolveCustomEndpointRequestHeaders(customEndpoint);
+  const runtimeBaseUrl = resolveCustomEndpointRuntimeBaseUrl(baseUrl, customEndpoint);
   registry.registerProvider('custom-endpoint', {
-    baseUrl,
+    baseUrl: runtimeBaseUrl,
     apiKey: resolveCustomEndpointApiKey(),
     api,
     authHeader: true,
-    models: allIds.map(id => buildCustomEndpointModelDef(
-      id,
-      { supportsImages: initConfig?.customEndpoint?.supportsImages === true },
-      customModelOverrides.get(id),
+    ...(requestHeaders ? { headers: requestHeaders } : {}),
+    models: allIds.map(id => withCodexResponsesCompat(
+      buildCustomEndpointModelDef(
+        id,
+        { supportsImages: customEndpoint.supportsImages === true },
+        customModelOverrides.get(id),
+      ),
+      customEndpoint,
     )),
   });
-  debugLog(`Registered custom endpoint: ${baseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
+  debugLog(`Registered custom endpoint: ${runtimeBaseUrl} with ${allIds.length} model(s) [${allIds.join(', ')}], api: ${api}`);
 }
 
 /**
@@ -480,13 +497,12 @@ function createAuthenticatedRegistry(): {
   // by creating synthetic Model<Api> objects that the SDK requires.
   const hasCustomEndpoint = !!initConfig?.baseUrl?.trim();
   if (hasCustomEndpoint && initConfig?.customEndpoint) {
-    const { api } = initConfig.customEndpoint;
     const modelEntries: CustomEndpointModelEntry[] = (initConfig.customModels?.length
       ? initConfig.customModels
       : [initConfig.model || 'default']
     ).map(normalizeCustomEndpointModelEntry);
     customEndpointModelIds = new Set();  // Reset on fresh registry creation
-    registerCustomEndpointModels(modelRegistry, api, initConfig.baseUrl!.trim(), modelEntries);
+    registerCustomEndpointModels(modelRegistry, initConfig.customEndpoint, initConfig.baseUrl!.trim(), modelEntries);
   } else if (hasCustomEndpoint && !initConfig?.customEndpoint) {
     debugLog('Custom endpoint without protocol config — models may not resolve. Set customEndpoint.api for proper routing.');
   }
@@ -1481,7 +1497,7 @@ async function handleSetModel(msg: Extract<InboundMessage, { type: 'set_model' }
   // (registerProvider replaces, so we track all IDs and re-register the full set).
   if (!piModel && initConfig?.baseUrl?.trim() && initConfig?.customEndpoint) {
     const bareId = stripPiPrefix(msg.model);
-    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl!.trim(), [{ id: bareId }]);
+    registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint, initConfig.baseUrl!.trim(), [{ id: bareId }]);
     piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
     debugLog(`[set_model] Dynamically registered custom endpoint model: ${bareId}`);
   }

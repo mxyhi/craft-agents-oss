@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'bun:test'
 import {
+  buildCustomEndpointConfigForSubmit,
+  CUSTOM_ENDPOINT_PROTOCOL_OPTIONS,
   resolvePiAuthProviderForSubmit,
   resolvePresetStateForBaseUrlChange,
+  shouldShowCodexCliHeadersSwitch,
 } from '../submit-helpers'
 import { pickTierDefaults, resolveTierModels } from '../tier-models'
 
@@ -57,6 +60,32 @@ describe('resolvePiAuthProviderForSubmit', () => {
 
   it('passes through non-custom presets unchanged', () => {
     expect(resolvePiAuthProviderForSubmit('google', 'anthropic')).toBe('google')
+  })
+})
+
+describe('custom endpoint protocol options', () => {
+  it('offers OpenAI Responses as a custom endpoint protocol', () => {
+    expect(CUSTOM_ENDPOINT_PROTOCOL_OPTIONS.map(option => option.value)).toEqual([
+      'openai-completions',
+      'openai-responses',
+      'anthropic-messages',
+    ])
+  })
+
+  it('shows Codex CLI header simulation only for OpenAI Responses', () => {
+    expect(shouldShowCodexCliHeadersSwitch('openai-responses')).toBe(true)
+    expect(shouldShowCodexCliHeadersSwitch('openai-completions')).toBe(false)
+    expect(shouldShowCodexCliHeadersSwitch('anthropic-messages')).toBe(false)
+  })
+
+  it('submits Codex CLI header simulation only for OpenAI Responses', () => {
+    expect(buildCustomEndpointConfigForSubmit('openai-responses', true)).toEqual({
+      api: 'openai-responses',
+      simulateCodexCliHeaders: true,
+    })
+    expect(buildCustomEndpointConfigForSubmit('openai-completions', true)).toEqual({
+      api: 'openai-completions',
+    })
   })
 })
 

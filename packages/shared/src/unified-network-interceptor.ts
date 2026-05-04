@@ -1397,7 +1397,7 @@ const openAiResponsesAdapter: ApiAdapter = {
     // reference any earlier function_call. The upstream replies with an
     // opaque 400 (#613). We synthesize a deterministic id and drop true
     // orphans so the request reaches the API in a usable shape.
-    repairResponsesHistoryInPlace(input);
+    repairResponsesHistoryInPlace(input, { store: body.store });
 
     let injectedCount = 0;
 
@@ -1673,13 +1673,37 @@ export function validateOpenAiResponsesBody(body: Record<string, unknown>): void
  *
  * Exported for focused unit tests.
  */
-export function repairResponsesHistoryInPlace(input: Array<Record<string, unknown>>): {
+export function repairResponsesHistoryInPlace(input: Array<Record<string, unknown>>, options: { store?: unknown } = {}): {
   synthesizedCallIds: number;
   droppedOrphans: number;
+  droppedReasoningItems: number;
+  droppedReasoningReferences: number;
 } {
   let synthesizedCallIds = 0;
   let droppedOrphans = 0;
+  let droppedReasoningItems = 0;
+  let droppedReasoningReferences = 0;
   const knownCallIds = new Set<string>();
+
+  if (options.store === false) {
+    // With store=false, Responses reasoning ids (`rs_*`) are not persisted and
+    // cannot be replayed in later input. This mirrors sub2api's /codex filter.
+    for (let i = input.length - 1; i >= 0; i--) {
+      const entry = input[i];
+      if (!entry) continue;
+      if (entry.type === 'reasoning') {
+        input.splice(i, 1);
+        droppedReasoningItems++;
+        debugLog(`[OpenAI Responses Repair] Dropped non-persisted reasoning item at input[${i}]`);
+        continue;
+      }
+      if (entry.type === 'item_reference' && isResponsesReasoningItemId(entry.id)) {
+        input.splice(i, 1);
+        droppedReasoningReferences++;
+        debugLog(`[OpenAI Responses Repair] Dropped non-persisted reasoning reference at input[${i}]`);
+      }
+    }
+  }
 
   // First pass: synthesize missing call_ids on function_call entries so later
   // entries can reference them.
@@ -1703,7 +1727,7 @@ export function repairResponsesHistoryInPlace(input: Array<Record<string, unknow
   }
 
   if (synthesizedCallIds === 0 && input.every(e => e.type !== 'function_call_output')) {
-    return { synthesizedCallIds, droppedOrphans };
+    return { synthesizedCallIds, droppedOrphans, droppedReasoningItems, droppedReasoningReferences };
   }
 
   // Second pass: drop orphan function_call_output entries.
@@ -1719,7 +1743,11 @@ export function repairResponsesHistoryInPlace(input: Array<Record<string, unknow
     }
   }
 
-  return { synthesizedCallIds, droppedOrphans };
+  return { synthesizedCallIds, droppedOrphans, droppedReasoningItems, droppedReasoningReferences };
+}
+
+function isResponsesReasoningItemId(value: unknown): boolean {
+  return typeof value === 'string' && value.startsWith('rs_');
 }
 
 /** Tiny stable hash for synthesizing deterministic call_ids. Not a security primitive. */

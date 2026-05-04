@@ -90,6 +90,14 @@ describe('resolveCustomEndpointSetup', () => {
     })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
   })
 
+  it('uses the openai provider hint for openai-responses protocol', () => {
+    expect(resolveCustomEndpointSetup({
+      baseUrl: 'https://api.example.com/v1',
+      credential: 'sk-remote',
+      customEndpointApi: 'openai-responses',
+    })).toEqual({ authType: 'api_key_with_endpoint', piAuthProvider: 'openai' })
+  })
+
   it('treats remote endpoints without a credential as keyed (still requires a key)', () => {
     // Non-loopback URLs are never assumed keyless, even if credential is missing —
     // setup validation handles "missing key" separately. We still set piAuthProvider

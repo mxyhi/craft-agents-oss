@@ -71,6 +71,22 @@ describe('unified-network-interceptor responses-history repair (#613)', () => {
     expect(input.length).toBe(2);
   });
 
+  it('drops non-persisted reasoning item ids under store false', () => {
+    const input: Array<Record<string, unknown>> = [
+      { type: 'message', id: 'msg_1', role: 'assistant', content: [] },
+      { type: 'reasoning', id: 'rs_069e3541260626fa0169f863d79378819bb3cbcaeef937d57c' },
+      { type: 'item_reference', id: 'rs_reference_from_non_persisted_reasoning' },
+      { type: 'function_call', call_id: 'call_1', name: 'ls', arguments: '{}' },
+    ];
+    const result = repairResponsesHistoryInPlace(input, { store: false });
+    expect(result.droppedReasoningItems).toBe(1);
+    expect(result.droppedReasoningReferences).toBe(1);
+    expect(input).toEqual([
+      { type: 'message', id: 'msg_1', role: 'assistant', content: [] },
+      { type: 'function_call', call_id: 'call_1', name: 'ls', arguments: '{}' },
+    ]);
+  });
+
   it('produces a body that passes validation after repair (end-to-end)', () => {
     const input: Array<Record<string, unknown>> = [
       { type: 'function_call', name: 'ls', arguments: '{}' },

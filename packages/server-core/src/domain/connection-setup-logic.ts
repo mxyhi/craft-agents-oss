@@ -9,6 +9,7 @@ import type { ModelDefinition } from '@craft-agent/shared/config/models'
 import {
   type LlmConnection,
   type CustomEndpointApi,
+  resolveCustomEndpointPiAuthProvider,
   getDefaultModelsForConnection,
   getDefaultModelForConnection,
 } from '@craft-agent/shared/config'
@@ -118,7 +119,7 @@ export function resolveCustomEndpointSetup(input: {
   }
   return {
     authType: 'api_key_with_endpoint',
-    piAuthProvider: input.customEndpointApi === 'anthropic-messages' ? 'anthropic' : 'openai',
+    piAuthProvider: resolveCustomEndpointPiAuthProvider(input.customEndpointApi),
   }
 }
 

@@ -99,7 +99,22 @@ export type ModelSelectionMode = 'automaticallySyncedFromProvider' | 'userDefine
  * Protocol for custom API endpoints.
  * Determines which streaming adapter the Pi SDK uses for requests.
  */
-export type CustomEndpointApi = 'openai-completions' | 'anthropic-messages';
+export type CustomEndpointApi =
+  | 'openai-completions'
+  | 'openai-responses'
+  | 'anthropic-messages';
+
+export type CustomEndpointPiAuthProvider = 'openai' | 'anthropic';
+
+export function resolveCustomEndpointPiAuthProvider(api: CustomEndpointApi): CustomEndpointPiAuthProvider {
+  switch (api) {
+    case 'anthropic-messages':
+      return 'anthropic';
+    case 'openai-completions':
+    case 'openai-responses':
+      return 'openai';
+  }
+}
 
 /**
  * Custom endpoint protocol config.
@@ -109,6 +124,8 @@ export interface CustomEndpointConfig {
   api: CustomEndpointApi;
   /** Explicit capability hint for arbitrary endpoints — never guessed automatically. */
   supportsImages?: boolean;
+  /** Responses only: send Codex CLI-like identity headers for Codex-gated relays. */
+  simulateCodexCliHeaders?: boolean;
 }
 
 /**

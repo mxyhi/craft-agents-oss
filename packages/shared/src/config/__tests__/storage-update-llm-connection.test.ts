@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { pathToFileURL } from 'url'
+import { StoredConfigSchema } from '../validators'
 
 const STORAGE_MODULE_PATH = pathToFileURL(join(import.meta.dir, '..', 'storage.ts')).href
 
@@ -113,5 +114,38 @@ describe('updateLlmConnection – customEndpoint', () => {
 
     const conn = readConnection('custom-compat')
     expect(conn.customEndpoint).toEqual({ api: 'anthropic-messages' })
+  })
+
+  it('preserves Codex CLI header simulation in customEndpoint config', () => {
+    const customEndpoint = {
+      api: 'openai-responses',
+      simulateCodexCliHeaders: true,
+    }
+    const { runUpdate, readConnection } = setup([makeConnection()])
+
+    const ok = runUpdate('custom-compat', { customEndpoint })
+    expect(ok).toBe(true)
+
+    const conn = readConnection('custom-compat')
+    expect(conn.customEndpoint).toEqual(customEndpoint)
+  })
+})
+
+describe('StoredConfigSchema – customEndpoint', () => {
+  it('accepts OpenAI Responses endpoints with Codex CLI header simulation', () => {
+    const result = StoredConfigSchema.safeParse({
+      workspaces: [],
+      activeWorkspaceId: null,
+      activeSessionId: null,
+      defaultLlmConnection: 'custom-compat',
+      llmConnections: [makeConnection({
+        customEndpoint: {
+          api: 'openai-responses',
+          simulateCodexCliHeaders: true,
+        },
+      })],
+    })
+
+    expect(result.success).toBe(true)
   })
 })
