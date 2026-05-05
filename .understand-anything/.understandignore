@@ -1,0 +1,53 @@
+# .understandignore - patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+# Lines below are suggestions - uncomment to activate.
+# Use ! prefix to force-include something excluded by defaults.
+#
+# Built-in defaults are always excluded unless negated:
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+
+# --- From .gitignore (uncomment to exclude) ---
+
+# .build
+# apps/electron/release
+# apps/electron/resources/session-mcp-server/
+# apps/electron/resources/pi-agent-server/
+# logs
+# *.lcov
+# _.log
+# report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
+# .env
+# .env.development.local
+# .env.test.local
+# .env.production.local
+# .env.local
+# .eslintcache
+# .superpowers/
+# *.tsbuildinfo
+# .wrangler
+# .mintlify
+# .oss-sync-temp/
+# .claude/settings.local.json
+# ~/
+# .craft-agent/
+# *.pem
+# *.key
+# sshkey
+# id_rsa*
+# id_ed25519*
+# credentials.enc
+# *.credentials
+# .secrets
+# .actrc
+
+# --- Detected directories (uncomment to exclude) ---
+
+# docs/
+# scripts/
+
+# --- Test file patterns (uncomment to exclude) ---
+
+# *.test.*
+# *.spec.*
+# *.snap
