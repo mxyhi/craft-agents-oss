@@ -54,6 +54,19 @@ describe('buildBackendRuntimeSignature', () => {
     expect(disabled).not.toBe(enabled)
   })
 
+  it('changes when Codex CLI header simulation changes', () => {
+    const disabled = sig({
+      ...baseCompat,
+      customEndpoint: { api: 'openai-responses', supportsImages: true, simulateCodexCliHeaders: false },
+    })
+    const enabled = sig({
+      ...baseCompat,
+      customEndpoint: { api: 'openai-responses', supportsImages: true, simulateCodexCliHeaders: true },
+    })
+
+    expect(enabled).not.toBe(disabled)
+  })
+
   it('ignores non-runtime metadata such as lastUsedAt', () => {
     expect(sig({ ...baseCompat, lastUsedAt: 1 })).toBe(sig({ ...baseCompat, lastUsedAt: 2 }))
   })

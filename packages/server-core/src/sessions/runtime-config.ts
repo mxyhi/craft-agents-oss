@@ -81,6 +81,9 @@ export function buildBackendRuntimeSignature(input: BackendRuntimeSignatureInput
                     supportsImages: typeof connection.customEndpoint.supportsImages === 'boolean'
                       ? connection.customEndpoint.supportsImages
                       : undefined,
+                    simulateCodexCliHeaders: typeof connection.customEndpoint.simulateCodexCliHeaders === 'boolean'
+                      ? connection.customEndpoint.simulateCodexCliHeaders
+                      : undefined,
                   })
                 : undefined,
               models: normalizeCustomModels(connection),

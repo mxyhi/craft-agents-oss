@@ -134,7 +134,7 @@ interface RuntimeConfigUpdateMessage {
   providerType?: string;
   authType?: string;
   baseUrl?: string;
-  customEndpoint?: { api: CustomEndpointApi; supportsImages?: boolean };
+  customEndpoint?: CustomEndpointRuntimeConfig;
   customModels?: Array<string | { id: string; contextWindow?: number; supportsImages?: boolean }>;
 }
 
@@ -1525,14 +1525,14 @@ async function handleUpdateRuntimeConfig(msg: RuntimeConfigUpdateMessage): Promi
 
       customEndpointModelIds = new Set();
       customModelOverrides.clear();
-      registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl.trim(), modelEntries);
+      registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint, initConfig.baseUrl.trim(), modelEntries);
     }
 
     if (piSession && piModelRegistry) {
       let piModel = resolvePiModel(piModelRegistry, msg.model, initConfig.piAuth?.provider, shouldPreferCustomEndpoint());
       if (!piModel && initConfig.baseUrl?.trim() && initConfig.customEndpoint) {
         const bareId = stripPiPrefix(msg.model);
-        registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint.api, initConfig.baseUrl.trim(), [{ id: bareId }]);
+        registerCustomEndpointModels(piModelRegistry, initConfig.customEndpoint, initConfig.baseUrl.trim(), [{ id: bareId }]);
         piModel = piModelRegistry.find('custom-endpoint', bareId) ?? undefined;
         debugLog(`[runtime_config] Dynamically registered custom endpoint model: ${bareId}`);
       }
